@@ -35,23 +35,35 @@ export function createModels() {
     box(g, '#efd69a', [0, size + .012, 0], [size * .18, .025, size * 1.01]);
     box(g, '#fff6dd', [0, size * .53, size / 2 + .008], [size * .47, size * .25, .018]); return g;
   }
-  function truck(parent, xyz, rotation = 0, small = false) {
+  function truck(parent, xyz, rotation = 0, small = false, openCargo = false) {
     const g = new THREE.Group(); g.position.set(...xyz); g.rotation.y = rotation; parent.add(g);
     box(g, '#263d43', [0, .44, 0], [1.25, .23, 2.65]);
-    box(g, '#fcfaf1', [0, 1.15, -.5], [1.43, 1.25, 1.75], true);
-    box(g, '#e74837', [0, .72, -.5], [1.46, .3, 1.78]);
-    box(g, '#e74837', [0, .98, .92], [1.4, 1.15, 1.03], true);
+    if (openCargo) {
+      // Low cutaway sides make both layers of cargo readable from the town camera.
+      box(g, '#c5b99f', [0, .61, -.5], [1.43, .13, 1.75]);
+      for (const x of [-.68, .68]) {
+        box(g, '#fcfaf1', [x, .96, -.5], [.09, .65, 1.75], true);
+        box(g, '#d83b35', [x, 1.3, -.5], [.12, .065, 1.8]);
+      }
+      for (const z of [-1.33, .33]) box(g, '#fcfaf1', [0, .96, z], [1.43, .65, .09], true);
+    } else box(g, '#fcfaf1', [0, 1.15, -.5], [1.43, 1.25, 1.75], true);
+    if(openCargo){
+      for(const x of [-.69,.69])box(g, '#d83b35', [x, .72, -.5], [.08, .17, 1.78]);
+      for(const z of [-1.35,.35])box(g, '#d83b35', [0, .72, z], [1.46, .17, .08]);
+    }else box(g, '#d83b35', [0, .72, -.5], [1.46, .17, 1.78]);
+    box(g, '#d83b35', [0, .98, .92], [1.4, 1.15, 1.03], true);
     box(g, '#9ed8de', [0, 1.19, 1.45], [1.12, .43, .025]);
-    box(g, '#ed6c4e', [0, .83, 1.46], [1.42, .18, .08]);
+    box(g, '#bf292c', [0, .83, 1.46], [1.42, .18, .08]);
     box(g, '#f8d88e', [-.43, .65, 1.49], [.25, .15, .035]); box(g, '#f8d88e', [.43, .65, 1.49], [.25, .15, .035]);
     box(g, '#e7eee7', [0, .48, 1.47], [1.5, .14, .12]);
     for (const x of [-.72, .72]) for (const z of [-.84, .89]) {
       const tire = cyl(g, '#233b41', [x, .4, z], [.35, .17, .35]); tire.rotation.z = Math.PI / 2;
       const hub = cyl(g, '#d3dcd5', [x * 1.035, .4, z], [.17, .19, .17]); hub.rotation.z = Math.PI / 2;
     }
-    const side = label(g, 'LAPA', [.727, 1.23, -.48], 1.25, { color: '#e34838', height: .46 }); side.rotation.y = Math.PI / 2;
-    const other = label(g, 'LAPA', [-.727, 1.23, -.48], 1.25, { color: '#e34838', height: .46 }); other.rotation.y = -Math.PI / 2;
-    const cargo = new THREE.Group(); cargo.position.set(0, 1.81, -.5); g.add(cargo);
+    const logoY = openCargo ? 1.03 : 1.23;
+    const side = label(g, 'LAPA', [.731, logoY, -.48], 1.25, { color: '#d83b35', height: .4 }); side.rotation.y = Math.PI / 2;
+    const other = label(g, 'LAPA', [-.731, logoY, -.48], 1.25, { color: '#d83b35', height: .4 }); other.rotation.y = -Math.PI / 2;
+    const cargo = new THREE.Group(); cargo.position.set(0, openCargo ? .68 : 1.81, -.5); g.add(cargo);
     if (small) g.scale.setScalar(.8);
     return { group: g, cargo };
   }

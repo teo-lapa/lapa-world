@@ -16,21 +16,21 @@
 
 ### Task 1: World
 Files: src/world.js and src/world-models.js. Exact bounded requirements: .superpowers/world-brief.md.
-- [ ] Create an attractive miniature 3D scene with depot, truck, road and customer buildings.
-- [ ] Implement createWorld(host, { onArrive }) and documented drive/cargo/view API.
-- [ ] Validate module syntax and integration visually; review spec and code.
+- [x] Create an attractive miniature 3D scene with depot, truck, road and customer buildings.
+- [x] Implement createWorld(host, { onArrive }) and documented drive/cargo/view API.
+- [x] Validate module syntax and integration visually; review spec and code.
 
 ### Task 2: Playable chapter
 Files: src/game.js, src/storage.js, tests/game.test.js, tests/storage.test.js, src/main.js, src/style.css, index.html.
-- [ ] Test exact cargo validation, drive/unload state transitions, Joy answer validation, unlock boundaries and isolated save data before implementing state.
-- [ ] Implement profiles, level map, load/drive/unload/quiz/reward loop and replay.
-- [ ] Connect truck movement and camera states to world interface.
-- [ ] Add audio guidance, keyboard support and mobile layouts.
+- [x] Test exact cargo validation, drive/unload state transitions, Joy answer validation, unlock boundaries and isolated save data before implementing state.
+- [x] Implement profiles, level map, load/drive/unload/quiz/reward loop and replay.
+- [x] Connect truck movement and camera states to world interface.
+- [x] Add audio guidance, keyboard support and mobile layouts.
 
 ### Task 3: Install and publish
 Files: vite.config.js, public/icons, src/install.js, README.md, scripts/deploy.mjs.
-- [ ] Bundle fonts/logo, generate icons and configure PWA precache.
-- [ ] Test full small-driver and Joy flows, bad answers, reload persistence, profile separation, mobile layout and offline reload.
-- [ ] Review complete code and correct material issues.
+- [x] Bundle fonts/logo, generate icons and configure PWA precache.
+- [x] Test full small-driver and Joy flows, bad answers, reload persistence, profile separation, mobile layout and offline reload.
+- [x] Review complete code and correct material issues.
 - [ ] Build, create public repository and publish built game via gh-pages branch.
 - [ ] Verify public URL, manifest, service worker and provide game/repository links.

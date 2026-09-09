@@ -5,7 +5,7 @@ import '@fontsource/nunito/latin-800.css';
 import './style.css';
 import { createWorld } from './world.js';
 import { PRODUCTS, MODES, LEVELS, startLevel, loadProduct, removeProduct, depart, arrive, unloadProduct, answerQuiz, countProduct, totalOrder, isLoaded } from './game.js';
-import { loadSave, persistSave, addProfile, recordCompletion, unlockedLevel } from './storage.js';
+import { loadSave, persistSave, addProfile, renameProfile, recordCompletion, unlockedLevel } from './storage.js';
 import { speak, chime, setSound } from './audio.js';
 import { requestInstall, getInstallState, applyUpdate } from './install.js';
 
@@ -21,6 +21,8 @@ let world;
 let toastTimer;
 let celebrationTimer;
 let completedRecorded=false;
+let renderedStage;
+let pointerActivation;
 const esc=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const profile=()=>data.profiles.find(p=>p.id===data.activeId);
 const customer=()=>session?.level.destination==='bakery'?'Forno del Borgo':'Pizzeria Sole';
@@ -80,7 +82,7 @@ function map(){
   const unlocked=unlockedLevel(p);const finished=p.stars.every(n=>n===3);
   return `<div class="world-caption"><span class="location-pin">●</span> Benvenuti al deposito LAPA</div>
     <section class="panel map-panel" aria-labelledby="map-title"><div class="map-heading"><div class="ticket-tag"><span></span> ${MODES[p.mode].name}</div><span class="star-total">★ ${p.stars.reduce((a,b)=>a+b,0)}<small> / 15</small></span></div>
-    <h1 id="map-title">Ciao, ${esc(p.name)}!</h1><p class="intro">${finished?'Che bel viaggio! Quale consegna rifacciamo?':'La prossima avventura ti aspetta.'}</p>
+    <h1 id="map-title">Ciao, ${esc(p.name)}!</h1>${button('rename','Modifica nome','text-button')}<p class="intro">${finished?'Che bel viaggio! Quale consegna rifacciamo?':'La prossima avventura ti aspetta.'}</p>
     <ol class="level-list">${LEVELS[p.mode].map((level,i)=>`<li><button class="level ${i===unlocked&&!finished?'current':''} ${i>unlocked?'locked':''}" data-action="level" data-level="${i}" ${i>unlocked?'disabled':''} aria-label="Livello ${i+1}: ${level.title}${i>unlocked?', bloccato':''}"><span class="level-number">${i>unlocked?icon('lock'):i+1}</span><span class="level-text"><strong>${level.title}</strong>${p.stars[i]?stars(p.stars[i]):`<small>${level.destination==='bakery'?'Forno del Borgo':'Pizzeria Sole'}</small>`}</span><span class="level-sticker">${level.sticker}</span></button></li>`).join('')}</ol>
     <p class="map-foot">${finished?'🏆 Capitolo completato. Sei un pilota LAPA!':'Una consegna alla volta, un mondo di scoperte.'}</p>
     </section><div class="corner-note">Trascina il paesaggio per guardarti intorno</div>`;
@@ -124,7 +126,22 @@ function reward(){
 }
 
 function render(){
-  app.innerHTML=header()+(screen==='welcome'?welcome():screen==='map'?map():play());
+  const active=document.activeElement;
+  const focused=app.contains(active)?{id:active.id,tag:active.tagName,data:{...active.dataset},type:active.type}:null;
+  const stage=screen==='play'?`${screen}:${session.index}:${session.stage}`:screen;
+  const stageChanged=renderedStage!==undefined&&renderedStage!==stage;
+  const initial=renderedStage===undefined;
+  renderedStage=stage;
+  const name=document.querySelector('#player-name')?.value;
+  const updateNotice=getInstallState().updateReady&&['welcome','map'].includes(screen)?`<aside class="update-notice" aria-label="Aggiornamento disponibile"><p>Una nuova versione di LAPA World è pronta.</p>${button('update','Aggiorna il gioco','secondary')}</aside>`:'';
+  app.innerHTML=header()+(screen==='welcome'?welcome():screen==='map'?map():play())+updateNotice;
+  if(name!==undefined&&screen==='welcome')document.querySelector('#player-name').value=name;
+  if(!initial&&!dialog.open){
+    let target;
+    if(!stageChanged&&focused)target=[...app.querySelectorAll('button,input')].find(el=>el.tagName===focused.tag&&!el.disabled&&(focused.id?el.id===focused.id:Object.keys(focused.data).length?JSON.stringify({...el.dataset})===JSON.stringify(focused.data):el.type===focused.type));
+    if(!target&&(stageChanged||focused))target=app.querySelector('.panel h1,.panel h2');
+    if(target){if(!target.matches('button,input'))target.tabIndex=-1;target.focus({preventScroll:true});}
+  }
   document.body.dataset.screen=screen;document.body.dataset.stage=session?.stage||'';
   if(screen==='welcome'){
     document.querySelector('#profile-form').addEventListener('submit',event=>{
@@ -174,12 +191,24 @@ function celebrate(){
   document.querySelector('#celebration').innerHTML=Array.from({length:30},(_,i)=>`<i style="left:${(i*37)%100}%;--delay:${(i%7)*0.1}s;--turn:${i%2?'-':''}280deg;background:${colors[i%4]}"></i>`).join('');
   celebrationTimer=setTimeout(clearCelebration,4500);
 }
-function modal(content){setDriving(false);dialog.innerHTML=`${content}${button('close-dialog','Chiudi','secondary wide')}`;dialog.showModal();}
+function modal(content){dialog.removeAttribute('aria-labelledby');setDriving(false);dialog.innerHTML=`${content}${button('close-dialog','Chiudi','secondary wide')}`;dialog.showModal();}
 
 async function action(event){
   const element=event.target.closest('[data-action]');if(!element||element.disabled)return;
+  // A released hold must never activate a replacement control mounted beneath it.
+  if(event.detail>0&&pointerActivation){
+    const original=pointerActivation;pointerActivation=null;
+    if(original.element!==element||original.action!==element.dataset.action){event.preventDefault();return;}
+  }
   const a=element.dataset.action;
-  if(a==='mode'){
+  if(a==='rename'){
+    modal(`<h2 id="rename-title">Modifica il tuo nome</h2><form id="rename-form"><label for="rename-name">Nome del pilota</label><input id="rename-name" name="name" maxlength="20" autocomplete="off" value="${esc(profile().name)}"/><button type="submit" class="primary wide">Salva nome</button></form>`);
+    dialog.setAttribute('aria-labelledby','rename-title');
+    document.querySelector('#rename-name').focus();
+    document.querySelector('#rename-form').addEventListener('submit',event=>{
+      event.preventDefault();data=renameProfile(data,data.activeId,new FormData(event.target).get('name'));save();dialog.close();render();document.querySelector('[data-action="rename"]')?.focus();
+    });
+  }else if(a==='mode'){
     selectedMode=element.dataset.mode;
     const input=document.querySelector('#player-name');const name=input.value;render();document.querySelector('#player-name').value=name;
   }else if(a==='select-profile'){
@@ -213,6 +242,11 @@ async function action(event){
   }else if(a==='update'){dialog.close();applyUpdate();}
 }
 
+document.addEventListener('pointerdown',event=>{
+  const element=event.target.closest('button');
+  pointerActivation={element,action:element?.dataset.action};
+},true);
+document.addEventListener('pointercancel',()=>{pointerActivation=null;},true);
 document.addEventListener('click',action);
 document.addEventListener('keydown',event=>{
   if(dialog.open||event.target.matches('input,textarea'))return;
@@ -221,6 +255,7 @@ document.addEventListener('keydown',event=>{
 document.addEventListener('keyup',event=>{if(['Space','ArrowUp'].includes(event.code))setDriving(false);});
 window.addEventListener('blur',()=>setDriving(false));
 document.addEventListener('visibilitychange',()=>{if(document.hidden){setDriving(false);window.speechSynthesis?.cancel();}});
+window.addEventListener('update-ready',()=>{if(['welcome','map'].includes(screen))render();});
 window.addEventListener('offline-ready',()=>toast('Il mondo LAPA è pronto anche senza connessione.'));
 dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close();});
 

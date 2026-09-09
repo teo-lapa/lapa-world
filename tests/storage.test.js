@@ -32,3 +32,27 @@ test('untrusted names and stored stars are normalized at boundary', () => {
   assert.equal(data.profiles[0].name.length,20);
   assert.deepEqual(data.profiles[0].stars,[3,0,0,0,0]);
 });
+
+test('renaming persists normalized names without changing progress or other profiles', () => {
+  const prior=Object.getOwnPropertyDescriptor(globalThis,'localStorage');
+  const values=new Map();
+  Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)}});
+  try {
+    let data=saves.addProfile(saves.parseSave(null),'Uno','little','one');
+    data=saves.recordCompletion(data,'one',0);
+    data=saves.addProfile(data,'Due','explorer','two');
+    const other=data.profiles[1];
+    data=saves.renameProfile(data,'one','  Nome nuovo  ');
+    assert.equal(data.profiles[1],other);
+    assert.equal(saves.persistSave(data),true);
+    const restored=saves.loadSave();
+    assert.deepEqual(restored.profiles[0],{id:'one',name:'Nome nuovo',mode:'little',stars:[3,0,0,0,0]});
+    assert.deepEqual(restored.profiles[1],other);
+    assert.equal(restored.activeId,'two');
+    assert.equal(saves.renameProfile(restored,'one','   ').profiles[0].name,'Pilota');
+    assert.equal(saves.renameProfile(restored,'one','x'.repeat(30)).profiles[0].name.length,20);
+    assert.deepEqual(saves.renameProfile(restored,'missing','Name'),restored);
+  } finally {
+    if(prior)Object.defineProperty(globalThis,'localStorage',prior);else delete globalThis.localStorage;
+  }
+});

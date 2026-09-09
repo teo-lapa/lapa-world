@@ -4,10 +4,15 @@ import { launchBrowser } from './browser.mjs';
 const url=process.env.GAME_URL||'http://127.0.0.1:4173/lapa-world/';
 const browser=await launchBrowser();
 const errors=[];
+let page;
 await mkdir('test-results',{recursive:true});
 const click=async(page,selector)=>{await page.waitForSelector(selector,{visible:true});await page.click(selector);};
 try {
-  const page=await browser.newPage();
+  page=await browser.newPage();
+  // Keep browser/OS installation UI out of this automated game-flow test.
+  await page.evaluateOnNewDocument(()=>window.addEventListener('beforeinstallprompt',event=>{
+    event.preventDefault();event.stopImmediatePropagation();
+  },true));
   page.on('pageerror',error=>errors.push(error.message));
   page.on('response',response=>{if(response.status()>=400)errors.push(`${response.status()} ${response.url()}`);});
   await page.setViewport({width:1440,height:900,deviceScaleFactor:1});
@@ -23,6 +28,7 @@ try {
   assert.equal(await page.$eval('[data-action=depart]',b=>b.disabled),true);
   await page.screenshot({path:'test-results/desktop-load.png'});
   await click(page,'[data-product=tomato][data-action=load]');
+  assert.equal(await page.evaluate(()=>document.activeElement.dataset.product),'tomato','Loading keeps keyboard focus on the product');
   await click(page,'[data-action=depart]');
   await page.keyboard.down('Space');
   await page.waitForSelector('[data-action=unload]',{timeout:60000});
@@ -34,6 +40,12 @@ try {
   await click(page,'[data-action=home]');
   assert.equal(await page.$$eval('.level:disabled',nodes=>nodes.length),3);
   await page.reload({waitUntil:'networkidle0'});
+  assert.equal(await page.$eval('.star-total',e=>e.textContent.trim()),'★ 3 / 15');
+  await click(page,'[data-action=rename]');
+  await page.$eval('#rename-name',e=>{e.value='';});
+  await page.type('#rename-name','Pilota rinominato');
+  await click(page,'#rename-form button[type=submit]');
+  assert.match(await page.$eval('#map-title',e=>e.textContent),/Pilota rinominato/);
   assert.equal(await page.$eval('.star-total',e=>e.textContent.trim()),'★ 3 / 15');
   await click(page,'[data-action=profiles]');
   await click(page,'[data-mode=explorer]');
@@ -53,6 +65,8 @@ try {
   await page.touchscreen.touchStart(box.x+box.width/2,box.y+box.height/2);
   await page.waitForSelector('[data-action=unload]',{timeout:60000});
   await page.touchscreen.touchEnd();
+  await new Promise(resolve=>setTimeout(resolve,200));
+  assert.equal(await page.$$eval('[data-action=unload]',nodes=>nodes.length),5,'Releasing drive must not deliver a crate automatically');
   for(let i=0;i<5;i++)await click(page,'[data-action=unload]');
   await click(page,'[data-answer="4"]');
   assert.ok(await page.$('[data-stage=quiz]'));
@@ -70,10 +84,16 @@ try {
   assert.ok(await page.$('[data-action=load][data-product=apple]'));
   await page.screenshot({path:'test-results/mobile-offline.png'});
   await page.setOfflineMode(false);
+  await click(page,'[data-action=install]');
+  assert.match(await page.$eval('.offline-note',e=>e.textContent),/pronto anche senza connessione/);
+  await click(page,'[data-action=close-dialog]');
   await page.setViewport({width:844,height:390,deviceScaleFactor:1,isMobile:true,hasTouch:true});
   await page.screenshot({path:'test-results/mobile-landscape.png'});
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);
   assert.equal(overflow,false);
   assert.deepEqual(errors,[]);
-  console.log('PASS: desktop and touch delivery, quiz retry, isolated profiles, unlocks, reload persistence, offline play, landscape width, no browser errors.');
+  console.log('PASS: desktop and touch delivery, no ghost tap on arrival, keyboard focus, rename, quiz retry, isolated profiles, unlocks, reload persistence, offline play, landscape width, no browser errors.');
+} catch(error) {
+  if(page){await page.screenshot({path:'test-results/failure.png'});console.log(await page.$eval('#app',e=>e.textContent));}
+  throw error;
 } finally {await browser.close();}

@@ -25,6 +25,9 @@ export function addProfile(data,name,mode,id) {
   if(!['little','explorer'].includes(mode) || data.profiles.some(p=>p.id===id) || data.profiles.length>=12) return data;
   return {...data,activeId:id,profiles:[...data.profiles,{id,name:cleanName(name),mode,stars:[0,0,0,0,0]}]};
 }
+export function renameProfile(data,id,name) {
+  return {...data,profiles:data.profiles.map(p=>p.id===id?{...p,name:cleanName(name)}:p)};
+}
 export function unlockedLevel(profile) {
   const first=profile.stars.findIndex(n=>n===0);
   return first===-1 ? 4 : first;
