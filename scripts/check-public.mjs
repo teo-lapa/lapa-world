@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { launchBrowser } from './browser.mjs';
 const url=process.env.GAME_URL||'https://teo-lapa.github.io/lapa-world/';
 let reachable=false;
+const localHtml=await readFile('dist/index.html','utf8').catch(()=>'');
+const expectedScript=localHtml.match(/src="([^"]*\/assets\/index-[^"]+\.js)"/)?.[1];
 for(let attempt=0;attempt<12;attempt++){
   const response=await fetch(url,{cache:'no-store'});
-  if(response.ok&&(await response.text()).includes('LAPA World')){reachable=true;break;}
+  const html=await response.text();
+  if(response.ok&&html.includes('LAPA World')&&(!expectedScript||html.includes(expectedScript))){reachable=true;break;}
   await new Promise(resolve=>setTimeout(resolve,5000));
 }
-assert.ok(reachable,'Public game must become reachable');
+assert.ok(reachable,'Expected public build must become reachable');
 const browser=await launchBrowser();
 try{
   const page=await browser.newPage();const errors=[];

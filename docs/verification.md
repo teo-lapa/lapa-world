@@ -32,5 +32,6 @@ Validated on 9 September 2026 before publishing:
 - `npm run test:update`: serves the actual previous gh-pages build, installs its service worker, saves two version-1 profiles with stars, then serves the new build. Updating does not interrupt the trip. The map offers the update; accepting it preserves the complete saved data, caches all 37 voice clips and enables the new cockpit offline.
 - Independent scoped code review approved the enhancement. The minor focus/visibility lifecycle suggestion was implemented: the engine resumes at idle on return without resuming movement.
 - No JavaScript errors or failed HTTP asset requests in the integrated browser checks.
+- Published version 1.1 verified at the public GitHub Pages URL: expected application bundle served, valid HTTPS/manifest/icons, all 37 voice clips precached, offline reload and cab entry successful, zero browser/HTTP errors. The public check waits for the expected bundle so it does not mistake the previous build for the new deployment.
 
 Voice quality and performance on physical phones still need the family's listening/play feedback; browser tests verify valid audio and playback, not a subjective naturalness score.
