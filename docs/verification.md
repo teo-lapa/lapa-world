@@ -11,7 +11,10 @@ Validated on 9 September 2026.
 - Chrome mobile landscape 844×390: no horizontal document overflow; scene/UI screenshots inspected.
 - Browser flow has no JavaScript errors or HTTP asset failures.
 - Independent code review and scoped follow-up approved fixes to editable names, keyboard focus, update notification, offline readiness and pointer activation.
+- Public GitHub Pages deployment verified at https://teo-lapa.github.io/lapa-world/: HTTPS, correct manifest, all app icons HTTP 200, 3D rendering and a fresh offline reload followed by loading cargo. Public browser smoke check reported zero JavaScript/HTTP errors.
 
 Commands: `npm test`, `npm run build`, `npm run test:browser` with `npm run preview` serving the built game.
+
+Public deployment check: `node scripts/check-public.mjs`. The installed worker takes control on the next navigation; the public check verifies activation and then reloads before the offline scenario.
 
 Physical iPhone/Android devices have not been tested. The app uses WebGL; performance and locally available speech voices depend on the device. This release contains the two children's paths; adult strategy and horses are separate future chapters.

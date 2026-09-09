@@ -32,5 +32,5 @@ Files: vite.config.js, public/icons, src/install.js, README.md, scripts/deploy.m
 - [x] Bundle fonts/logo, generate icons and configure PWA precache.
 - [x] Test full small-driver and Joy flows, bad answers, reload persistence, profile separation, mobile layout and offline reload.
 - [x] Review complete code and correct material issues.
-- [ ] Build, create public repository and publish built game via gh-pages branch.
-- [ ] Verify public URL, manifest, service worker and provide game/repository links.
+- [x] Build, create public repository and publish built game via gh-pages branch.
+- [x] Verify public URL, manifest, service worker and provide game/repository links.
