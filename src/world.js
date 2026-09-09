@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createModels } from './world-models.js';
+import { createCockpit } from './cockpit.js';
 
 export function createWorld(host, { onArrive = () => {} } = {}) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-  renderer.setClearColor('#c8e8e4'); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.setClearColor('#c8e8e4'); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1;
   renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;touch-action:none';
   renderer.domElement.setAttribute('aria-label', 'Paese 3D LAPA con magazzino, camion, pizzeria e panetteria');
@@ -53,6 +54,12 @@ export function createWorld(host, { onArrive = () => {} } = {}) {
   const clouds=[];
   for(const [x,y,z]of [[-17,13,-18],[11,15,-25],[28,12,-10]]){const cloud=new THREE.Group();cloud.position.set(x,y,z);scene.add(cloud);for(let i=0;i<3;i++)m.mesh(cloud,m.ball,'#f9f5de',[i*1.3,Math.sin(i)*.45,0],[1.7,1,1.2]);clouds.push(cloud);}
   const camera=new THREE.OrthographicCamera(-25,25,20,-20,.1,150);camera.position.set(30,31,39);
+  const cabCamera=new THREE.PerspectiveCamera(70,1,.06,150);scene.add(cabCamera);
+  const cockpit=createCockpit(cabCamera);
+  let cockpitEnabled=false,cabInitialized=false;
+  const cabPosition=new THREE.Vector3(),cabLook=new THREE.Vector3(),cabDirection=new THREE.Vector3();
+  const cabRotation=new THREE.Quaternion(),cabLookMatrix=new THREE.Matrix4(),worldUp=new THREE.Vector3(0,1,0);
+  function setCockpit(active){cockpitEnabled=Boolean(active);cabInitialized=false;controls.enabled=!(cockpitEnabled&&currentView==='road');}
   const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.enablePan=false;controls.minZoom=.7;controls.maxZoom=1.7;controls.minPolarAngle=.35;controls.maxPolarAngle=1.15;controls.target.set(0,0,0);controls.update();
   const reduced=window.matchMedia('(prefers-reduced-motion: reduce)');
   let currentView='overview',driving=false,progress=0,arrived=false,disposed=false,raf=0,last=performance.now(),elapsed=0,transition=true;
@@ -77,6 +84,8 @@ export function createWorld(host, { onArrive = () => {} } = {}) {
   makeRoute();
   function setView(view){
     currentView=['overview','depot','road','pizzeria','bakery'].includes(view)?view:'overview';
+    controls.enabled=!(cockpitEnabled&&currentView==='road');
+    cabInitialized=false;
     controls.enableRotate=currentView!=='road';
     controls.enableZoom=currentView!=='road';
     if(currentView==='road'){camera.zoom=1;followTruck();return;}
@@ -99,7 +108,39 @@ export function createWorld(host, { onArrive = () => {} } = {}) {
     if(currentView==='road')followTruck();
     if(transition){const lerp=reduced.matches?1:1-Math.exp(-dt*4);controls.target.lerp(goalTarget,lerp);camera.position.lerp(goalPosition,lerp);span=THREE.MathUtils.lerp(span,goalSpan,lerp);const aspect=Math.max(host.clientWidth,1)/Math.max(host.clientHeight,1);camera.left=-span*aspect/2;camera.right=span*aspect/2;camera.top=span/2;camera.bottom=-span/2;camera.updateProjectionMatrix();if(camera.position.distanceTo(goalPosition)<.02)transition=false;}
     if(!reduced.matches){flag.rotation.y=Math.sin(elapsed*1.7)*.12;clouds.forEach((c,i)=>{c.position.x+=Math.sin(elapsed*.05+i)*dt*.09;});}
-    controls.update();renderer.render(scene,camera);raf=requestAnimationFrame(animate);
+    controls.update();
+    const cabActive=cockpitEnabled&&currentView==='road';
+    cockpit.group.visible=cabActive;player.group.visible=!cabActive;
+    const width=Math.max(host.clientWidth,1),height=Math.max(host.clientHeight,1);
+    renderer.setViewport(0,0,width,height);renderer.setScissorTest(false);renderer.clear();
+    if(cabActive){
+      // The game panel sits below on portrait/desktop and on the right in short landscape.
+      const shortLandscape=width>height&&height<560;
+      const viewWidth=shortLandscape?Math.round(width*.55):width;
+      const viewHeight=shortLandscape?height:Math.round(height*.7);
+      cabCamera.aspect=viewWidth/viewHeight;cabCamera.updateProjectionMatrix();cockpit.frame(cabCamera.aspect);
+      cabPosition.copy(player.group.position);cabPosition.y+=1.5;
+      const tangent=curve.getTangentAt(progress);
+      cabPosition.addScaledVector(tangent,.65);
+      const ahead=Math.min(1,progress+.045);
+      cabLook.copy(curve.getPointAt(ahead));cabLook.y+=1.28;
+      // At arrival extrapolate the last heading, instead of looking back at the cab.
+      if(ahead===progress||cabLook.distanceTo(cabPosition)<1.5)cabLook.copy(cabPosition).addScaledVector(tangent,4);
+      cabDirection.subVectors(cabLook,cabPosition).normalize();
+      const yaw=Math.atan2(cabDirection.x,cabDirection.z);
+      if(!cabInitialized){cabCamera.position.copy(cabPosition);cabCamera.lookAt(cabLook);cabInitialized=true;}
+      else {
+        cabCamera.position.copy(cabPosition);
+        cabRotation.setFromRotationMatrix(cabLookMatrix.lookAt(cabPosition,cabLook,worldUp));
+        cabCamera.quaternion.slerp(cabRotation,reduced.matches?1:1-Math.exp(-dt*7));
+      }
+      const turn=THREE.MathUtils.euclideanModulo(yaw-player.group.rotation.y+Math.PI,Math.PI*2)-Math.PI;
+      cockpit.update(turn*3,reduced.matches);
+      renderer.setViewport(0,height-viewHeight,viewWidth,viewHeight);
+      renderer.setScissor(0,height-viewHeight,viewWidth,viewHeight);renderer.setScissorTest(true);
+      renderer.render(scene,cabCamera);renderer.setScissorTest(false);
+    }else renderer.render(scene,camera);
+    raf=requestAnimationFrame(animate);
   }
   function visibilityChanged(){
     cancelAnimationFrame(raf);raf=0;
@@ -108,5 +149,5 @@ export function createWorld(host, { onArrive = () => {} } = {}) {
   }
   document.addEventListener('visibilitychange',visibilityChanged);
   visibilityChanged();
-  return {setView,setCargo,prepareTrip,setDriving(active){driving=Boolean(active)&&!arrived;},reset(){prepareTrip('pizzeria');setCargo([]);setView('overview');},dispose(){if(disposed)return;disposed=true;cancelAnimationFrame(raf);document.removeEventListener('visibilitychange',visibilityChanged);observer.disconnect();controls.dispose();roadGeo.dispose();roadMat.dispose();m.dispose();renderer.dispose();renderer.domElement.remove();}};
+  return {setView,setCargo,prepareTrip,setCockpit,setDriving(active){driving=Boolean(active)&&!arrived;},reset(){setCockpit(false);prepareTrip('pizzeria');setCargo([]);setView('overview');},dispose(){if(disposed)return;disposed=true;cancelAnimationFrame(raf);document.removeEventListener('visibilitychange',visibilityChanged);observer.disconnect();controls.dispose();cockpit.dispose();roadGeo.dispose();roadMat.dispose();m.dispose();renderer.dispose();renderer.domElement.remove();}};
 }

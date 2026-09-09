@@ -1,6 +1,6 @@
 {
   "name": "lapa-world",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "Un piccolo mondo 3D di consegne e scoperte",
@@ -10,6 +10,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --test tests/*.test.js",
     "test:browser": "node scripts/check-browser.mjs",
+    "test:audio": "node scripts/check-cab-audio.mjs",
+    "test:update": "node scripts/check-update.mjs",
     "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {

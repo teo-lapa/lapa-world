@@ -41,6 +41,15 @@ try{
   await page.click('[data-level="0"]');
   await page.click('[data-action=load][data-product=tomato]');
   assert.equal(await page.$eval('[data-action=depart]',e=>e.disabled),false);
+  const voices=await page.evaluate(async()=>{
+    let n=0;for(const name of await caches.keys())for(const request of await(await caches.open(name)).keys())if(new URL(request.url).pathname.endsWith('.mp3'))n++;
+    return n;
+  });
+  assert.equal(voices,37,'Public update includes all offline narration');
+  await page.click('[data-action=depart]');await page.click('[data-action=cockpit]');
+  assert.equal(await page.$eval('body',e=>e.dataset.cockpit),'true');
+  await new Promise(resolve=>setTimeout(resolve,900));
+  await page.screenshot({path:'test-results/public-cab-mobile.png'});
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({url,https:await page.evaluate(()=>isSecureContext),manifest:'valid',icons:'200',world:'rendered',offline:'reloaded and played',browserErrors:errors.length}));
+  console.log(JSON.stringify({url,https:await page.evaluate(()=>isSecureContext),manifest:'valid',icons:'200',world:'rendered',offline:'reloaded and played in cab',voiceClips:voices,browserErrors:errors.length}));
 }finally{await browser.close();}

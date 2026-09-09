@@ -6,7 +6,7 @@ import './style.css';
 import { createWorld } from './world.js';
 import { PRODUCTS, MODES, LEVELS, startLevel, loadProduct, removeProduct, depart, arrive, unloadProduct, answerQuiz, countProduct, totalOrder, isLoaded } from './game.js';
 import { loadSave, persistSave, addProfile, renameProfile, recordCompletion, unlockedLevel } from './storage.js';
-import { speak, chime, setSound } from './audio.js';
+import { speak, chime, setSound, setEngine, stopSpeech } from './audio.js';
 import { requestInstall, getInstallState, applyUpdate } from './install.js';
 
 const app=document.querySelector('#app');
@@ -17,6 +17,7 @@ let screen=data.activeId?'map':'welcome';
 let selectedMode='little';
 let session=null;
 let driving=false;
+let cockpit=false;
 let world;
 let toastTimer;
 let celebrationTimer;
@@ -69,7 +70,7 @@ function welcome(){
   return `<div class="world-caption"><span class="location-pin">●</span> Il tuo piccolo mondo, grandi avventure.</div>
     <section class="panel welcome-panel" aria-labelledby="welcome-title">
       <div class="ticket-tag"><span></span> Capitolo 1 · Le prime consegne</div>
-      <h1 id="welcome-title">Si parte!</h1><p class="intro">Un camion rosso.<br>Un mondo tutto da scoprire.</p>
+      <h1 id="welcome-title">Si parte!</h1><p class="intro">Un camion rosso.<br> Un mondo tutto da scoprire.</p>
       <form id="profile-form"><label for="player-name">Come ti chiami?</label><input id="player-name" name="name" maxlength="20" placeholder="Il tuo nome" autocomplete="off" value=""/>
       <fieldset><legend>Scegli la tua avventura</legend>
       <div class="mode-choices">${Object.entries(MODES).map(([key,m])=>`<button type="button" class="mode-choice ${selectedMode===key?'selected':''}" data-action="mode" data-mode="${key}" aria-pressed="${selectedMode===key}"><span class="mode-emoji">${m.icon}</span><span><strong>${m.name}</strong><small>${m.age} · ${m.description}</small></span><span class="mode-dot">${selectedMode===key?icon('check'):''}</span></button>`).join('')}</div></fieldset>
@@ -109,6 +110,7 @@ function play(){
       ${button('depart',`${ready?'Tutto pronto, partiamo!':'Prima carichiamo l’ordine'} ${icon('arrow')}`,'primary wide',ready?'':'disabled')}`;
   }else if(s.stage==='drive'){
     content=`<div class="task-title"><div><h2>Andiamo da ${customer()}!</h2><p>Tieni premuto per far viaggiare il camion.</p></div><span class="destination-emoji">${s.level.destination==='bakery'?'🥐':'🍕'}</span></div>
+      ${button('cockpit',`${cockpit?'🌳 Vista dall’alto':'🚚 Sali a bordo'} ${icon('arrow')}`,'cab-toggle',`aria-pressed="${cockpit}"`)}
       <button class="drive-button" id="drive" aria-label="Tieni premuto per guidare"><span class="steering-wheel">◉</span><span><strong>Tieni premuto</strong><small>e si parte!</small></span><span class="drive-arrow">↑</span></button><p class="keyboard-hint">Sul computer puoi tenere premuta la barra spaziatrice.</p>`;
   }else if(s.stage==='unload'){
     content=`<div class="task-title"><div><h2>Eccoci, consegna in arrivo!</h2><p>Tocca le cassette per darle al cliente.</p></div><span class="destination-emoji">👨‍🍳</span></div>
@@ -143,13 +145,14 @@ function render(){
     if(target){if(!target.matches('button,input'))target.tabIndex=-1;target.focus({preventScroll:true});}
   }
   document.body.dataset.screen=screen;document.body.dataset.stage=session?.stage||'';
+  document.body.dataset.cockpit=String(cockpit&&session?.stage==='drive');
   if(screen==='welcome'){
     document.querySelector('#profile-form').addEventListener('submit',event=>{
       event.preventDefault();
       if(data.profiles.length>=12){toast('Ci sono già 12 piloti. Scegli un profilo esistente.');return;}
       const name=new FormData(event.target).get('name');
       data=addProfile(data,name,selectedMode,crypto.randomUUID());save();screen='map';render();chime();
-      speak(`Ciao ${profile().name}! Scegli la tua prima consegna.`);
+      speak('Benvenuto a bordo! Scegli la tua prima consegna.');
     });
   }
   const drive=document.querySelector('#drive');
@@ -163,18 +166,20 @@ function render(){
 
 function openLevel(index){
   const p=profile();if(!p||index>unlockedLevel(p))return;
-  setDriving(false);session=startLevel(p.mode,index);screen='play';completedRecorded=false;
+  setDriving(false);cockpit=false;setEngine('off');session=startLevel(p.mode,index);screen='play';completedRecorded=false;
   clearCelebration();world?.reset();world?.prepareTrip(session.level.destination);world?.setView('depot');render();speak(instruction());
 }
 function updateCargo(){world?.setCargo(session.cargo.map(id=>({id,color:PRODUCTS[id].color})));}
 function transition(result){
   if(!result.ok){chime('soft');toast(result.message);speak(result.message);return;}
   const previous=session.stage;session=result.session;updateCargo();
-  if(session.stage==='drive'){world?.setView('road');}
+  if(session.stage==='drive'){world?.setView('road');syncEngine();}
   if(session.stage==='unload'){setDriving(false);world?.setView(session.level.destination);}
   if(session.stage==='complete'&&!completedRecorded){
     completedRecorded=true;data=recordCompletion(data,data.activeId,session.index);save();chime('win');celebrate();
   }else chime();
+  if(session.stage!==previous){clearTimeout(toastTimer);toastElement.classList.remove('visible');}
+  if(session.stage!=='drive')setEngine('off');
   render();
   if(session.stage!==previous)speak(instruction());
   else if(session.stage==='load'&&isLoaded(session))speak('Perfetto! Il camion è pronto. Partiamo!');
@@ -182,8 +187,10 @@ function transition(result){
 function setDriving(value){
   driving=Boolean(value&&screen==='play'&&session?.stage==='drive'&&!dialog.open);
   world?.setDriving(driving);document.querySelector('#drive')?.classList.toggle('driving',driving);
+  syncEngine();
 }
-function toMap(){setDriving(false);session=null;screen=profile()?'map':'welcome';clearCelebration();world?.reset();render();}
+function syncEngine(){setEngine(screen==='play'&&session?.stage==='drive'&&!dialog.open&&!document.hidden?(driving?'drive':'idle'):'off');}
+function toMap(){setDriving(false);setEngine('off');stopSpeech();cockpit=false;session=null;screen=profile()?'map':'welcome';clearCelebration();world?.reset();render();}
 function clearCelebration(){clearTimeout(celebrationTimer);document.querySelector('#celebration').replaceChildren();}
 function celebrate(){
   if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
@@ -191,7 +198,7 @@ function celebrate(){
   document.querySelector('#celebration').innerHTML=Array.from({length:30},(_,i)=>`<i style="left:${(i*37)%100}%;--delay:${(i%7)*0.1}s;--turn:${i%2?'-':''}280deg;background:${colors[i%4]}"></i>`).join('');
   celebrationTimer=setTimeout(clearCelebration,4500);
 }
-function modal(content){dialog.removeAttribute('aria-labelledby');setDriving(false);dialog.innerHTML=`${content}${button('close-dialog','Chiudi','secondary wide')}`;dialog.showModal();}
+function modal(content){dialog.removeAttribute('aria-labelledby');setDriving(false);setEngine('off');dialog.innerHTML=`${content}${button('close-dialog','Chiudi','secondary wide')}`;dialog.showModal();}
 
 async function action(event){
   const element=event.target.closest('[data-action]');if(!element||element.disabled)return;
@@ -201,7 +208,9 @@ async function action(event){
     if(original.element!==element||original.action!==element.dataset.action){event.preventDefault();return;}
   }
   const a=element.dataset.action;
-  if(a==='rename'){
+  if(a==='cockpit'){
+    setDriving(false);cockpit=!cockpit;world?.setCockpit(cockpit);render();
+  }else if(a==='rename'){
     modal(`<h2 id="rename-title">Modifica il tuo nome</h2><form id="rename-form"><label for="rename-name">Nome del pilota</label><input id="rename-name" name="name" maxlength="20" autocomplete="off" value="${esc(profile().name)}"/><button type="submit" class="primary wide">Salva nome</button></form>`);
     dialog.setAttribute('aria-labelledby','rename-title');
     document.querySelector('#rename-name').focus();
@@ -217,7 +226,7 @@ async function action(event){
     if(screen==='play'){modal('<h2>Cambiare pilota?</h2><p>Questa consegna ricomincerà dall’inizio. Le stelle conquistate restano salvate.</p>'+button('confirm-profiles','Cambia pilota','primary wide'));}
     else{screen='welcome';session=null;world?.reset();render();}
   }else if(a==='confirm-profiles'){
-    dialog.close();screen='welcome';session=null;clearCelebration();world?.reset();render();
+    dialog.close();setEngine('off');stopSpeech();cockpit=false;screen='welcome';session=null;clearCelebration();world?.reset();render();
   }else if(a==='level')openLevel(Number(element.dataset.level));
   else if(a==='load')transition(loadProduct(session,element.dataset.product));
   else if(a==='remove')transition(removeProduct(session,element.dataset.product));
@@ -238,7 +247,7 @@ async function action(event){
   else if(a==='install'){
     if(await requestInstall())return;
     const state=getInstallState();
-    modal(`<div class="dialog-emoji">📲</div><h2>${state.installed?'LAPA è già con te!':'Porta LAPA con te'}</h2><p><strong>iPhone e iPad:</strong> apri in Safari, tocca Condividi e poi “Aggiungi alla schermata Home”.</p><p><strong>Android:</strong> nel menu del browser scegli “Installa app” o “Aggiungi a schermata Home”.</p><p class="offline-note">${state.offlineReady?'✓ Il gioco è pronto anche senza connessione.':'Apri il gioco con una connessione per scaricare tutti i livelli. Il primo caricamento può richiedere qualche istante.'}</p><p class="small-note">I progressi sono salvati su questo dispositivo. La voce guida dipende dalle voci disponibili sul telefono.</p>${state.updateReady?button('update','Aggiorna il gioco','primary wide'):''}`);
+    modal(`<div class="dialog-emoji">📲</div><h2>${state.installed?'LAPA è già con te!':'Porta LAPA con te'}</h2><p><strong>iPhone e iPad:</strong> apri in Safari, tocca Condividi e poi “Aggiungi alla schermata Home”.</p><p><strong>Android:</strong> nel menu del browser scegli “Installa app” o “Aggiungi a schermata Home”.</p><p class="offline-note">${state.offlineReady?'✓ Il gioco è pronto anche senza connessione.':'Apri il gioco con una connessione per scaricare tutti i livelli. Il primo caricamento può richiedere qualche istante.'}</p><p class="small-note">I progressi sono salvati su questo dispositivo. Le istruzioni vocali sono incluse nel gioco e funzionano anche offline.</p>${state.updateReady?button('update','Aggiorna il gioco','primary wide'):''}`);
   }else if(a==='update'){dialog.close();applyUpdate();}
 }
 
@@ -253,8 +262,10 @@ document.addEventListener('keydown',event=>{
   if(screen==='play'&&session?.stage==='drive'&&['Space','ArrowUp'].includes(event.code)) {event.preventDefault();setDriving(true);}
 });
 document.addEventListener('keyup',event=>{if(['Space','ArrowUp'].includes(event.code))setDriving(false);});
-window.addEventListener('blur',()=>setDriving(false));
-document.addEventListener('visibilitychange',()=>{if(document.hidden){setDriving(false);window.speechSynthesis?.cancel();}});
+window.addEventListener('blur',()=>{setDriving(false);setEngine('off');});
+window.addEventListener('focus',syncEngine);
+document.addEventListener('visibilitychange',()=>{if(document.hidden){setDriving(false);setEngine('off');stopSpeech();}else syncEngine();});
+dialog.addEventListener('close',syncEngine);
 window.addEventListener('update-ready',()=>{if(['welcome','map'].includes(screen))render();});
 window.addEventListener('offline-ready',()=>toast('Il mondo LAPA è pronto anche senza connessione.'));
 dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close();});
