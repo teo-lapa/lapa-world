@@ -1,0 +1,23 @@
+{
+  "name": "lapa-world",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Un piccolo mondo 3D di consegne e scoperte",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "@fontsource/baloo-2": "^5.3.0",
+    "@fontsource/nunito": "^5.3.0",
+    "three": "^0.186.0",
+    "vite-plugin-pwa": "^1.3.0"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.10.0",
+    "vite": "^6.4.3"
+  }
+}
