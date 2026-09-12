@@ -1,4 +1,11 @@
 import { LEVELS } from '../src/game.js';
+import { CUSTOMERS, bonusLevel } from '../src/campaign.js';
+
+// Fixed campaign copy only: never synthesize player names or variable bonus titles.
+const levels = Object.entries(LEVELS).flatMap(([mode, campaign]) => [
+  ...campaign,
+  ...Array.from({ length: 200 }, (_, round) => bonusLevel(mode, round)),
+]);
 
 export const voiceLines=[...new Set([
   'Benvenuto a bordo! Scegli la tua prima consegna.',
@@ -14,12 +21,18 @@ export const voiceLines=[...new Set([
   'Prima raggiungiamo il cliente.',
   'Questa cassetta non si può scaricare adesso.',
   'Prima completiamo la consegna.',
-  ...['Pizzeria Sole','Forno del Borgo'].flatMap(customer=>[
+  'Acquistiamo solo i prodotti indicati nell’ordine.',
+  'Non ci sono abbastanza monete per questa cassetta.',
+  'Controlla la dispensa e acquista le cassette mancanti.',
+  'Ascolta il cliente e cerca il prodotto che desidera.',
+  'Prima prepariamo tutti i prodotti.',
+  ...Object.values(CUSTOMERS).flatMap(({ name: customer })=>[
     `Si parte per ${customer}! Tieni premuto il pulsante per guidare.`,
     `Siamo arrivati! Tocca le cassette per consegnarle a ${customer}.`,
   ]),
-  ...Object.values(LEVELS).flatMap(levels=>levels.flatMap(level=>[
-    `${level.intro} Tocca i prodotti per caricarli sul camion.`,
+  ...levels.flatMap(level=>[
+    ...(level.kind === 'visit' ? [level.intro, level.visitText] :
+      [`${level.intro} Tocca i prodotti per caricarli sul camion.`]),
     ...(level.quiz?[level.quiz.question,level.quiz.hint]:[]),
-  ])),
+  ]),
 ])];

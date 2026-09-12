@@ -4,8 +4,10 @@ import '@fontsource/nunito/latin-600.css';
 import '@fontsource/nunito/latin-800.css';
 import './style.css';
 import { createWorld } from './world.js';
-import { PRODUCTS, MODES, LEVELS, startLevel, loadProduct, removeProduct, depart, arrive, unloadProduct, answerQuiz, countProduct, totalOrder, isLoaded } from './game.js';
-import { loadSave, persistSave, addProfile, renameProfile, recordCompletion, unlockedLevel } from './storage.js';
+import { PRODUCTS, MODES, LEVELS, startLevel, loadProduct, removeProduct, depart, arrive, unloadProduct, answerQuiz, countProduct, totalOrder, isLoaded, startBonus, buyProduct, confirmPurchase, chooseVisit, autoLoad } from './game.js';
+import { loadSave, persistSave, addProfile, renameProfile, recordCompletion, unlockedLevel, buyUpgrade, recordBonus } from './storage.js';
+import { CHAPTERS, CUSTOMERS } from './campaign.js';
+import { campaignMap, revealedChapter, companyPanel, purchasePanel, visitBrief, visitPanel } from './campaign-ui.js';
 import { speak, chime, setSound, setEngine, stopSpeech } from './audio.js';
 import { requestInstall, getInstallState, applyUpdate } from './install.js';
 
@@ -14,6 +16,8 @@ const dialog=document.querySelector('#dialog');
 const toastElement=document.querySelector('#toast');
 let data=loadSave();
 let screen=data.activeId?'map':'welcome';
+let chapterPage=null;
+let autoDriving=false;
 let selectedMode='little';
 let session=null;
 let driving=false;
@@ -26,7 +30,7 @@ let renderedStage;
 let pointerActivation;
 const esc=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const profile=()=>data.profiles.find(p=>p.id===data.activeId);
-const customer=()=>session?.level.destination==='bakery'?'Forno del Borgo':'Pizzeria Sole';
+const customer=()=>CUSTOMERS[session?.level.destination]?.name||'il cliente';
 setSound(data.sound);
 
 const icons={
@@ -47,6 +51,9 @@ function save(){if(!persistSave(data))toast('I progressi restano in questa parti
 function toast(text){clearTimeout(toastTimer);toastElement.textContent=text;toastElement.classList.add('visible');toastTimer=setTimeout(()=>toastElement.classList.remove('visible'),4200);}
 function instruction(){
   if(!session)return 'Scegli un’avventura e sali sul camion!';
+  if(session.stage==='purchase')return 'Controlla la dispensa e acquista le cassette mancanti.';
+  if(session.stage==='brief')return session.level.intro;
+  if(session.stage==='visit')return session.level.visitText;
   if(session.stage==='load')return `${session.level.intro} Tocca i prodotti per caricarli sul camion.`;
   if(session.stage==='drive')return `Si parte per ${customer()}! Tieni premuto il pulsante per guidare.`;
   if(session.stage==='unload')return `Siamo arrivati! Tocca le cassette per consegnarle a ${customer()}.`;
@@ -69,8 +76,8 @@ function welcome(){
   const saved=data.profiles.length?`<div class="saved-profiles"><p>Oppure continua con</p><div>${data.profiles.map(p=>button('select-profile',`${MODES[p.mode].icon} ${esc(p.name)}`,'saved-profile',`data-id="${esc(p.id)}"`)).join('')}</div></div>`:'';
   return `<div class="world-caption"><span class="location-pin">●</span> Il tuo piccolo mondo, grandi avventure.</div>
     <section class="panel welcome-panel" aria-labelledby="welcome-title">
-      <div class="ticket-tag"><span></span> Capitolo 1 · Le prime consegne</div>
-      <h1 id="welcome-title">Si parte!</h1><p class="intro">Un camion rosso.<br> Un mondo tutto da scoprire.</p>
+      <div class="ticket-tag"><span></span> Otto zone · Un mondo da scoprire</div>
+      <h1 id="welcome-title">Si parte!</h1><p class="intro">Un camion rosso.<br> Un mondo che cresce con te.</p>
       <form id="profile-form"><label for="player-name">Come ti chiami?</label><input id="player-name" name="name" maxlength="20" placeholder="Il tuo nome" autocomplete="off" value=""/>
       <fieldset><legend>Scegli la tua avventura</legend>
       <div class="mode-choices">${Object.entries(MODES).map(([key,m])=>`<button type="button" class="mode-choice ${selectedMode===key?'selected':''}" data-action="mode" data-mode="${key}" aria-pressed="${selectedMode===key}"><span class="mode-emoji">${m.icon}</span><span><strong>${m.name}</strong><small>${m.age} · ${m.description}</small></span><span class="mode-dot">${selectedMode===key?icon('check'):''}</span></button>`).join('')}</div></fieldset>
@@ -78,28 +85,25 @@ function welcome(){
     </section><div class="corner-note">Fatto di curiosità e buone cose.</div>`;
 }
 
-function map(){
-  const p=profile();if(!p)return welcome();
-  const unlocked=unlockedLevel(p);const finished=p.stars.every(n=>n===3);
-  return `<div class="world-caption"><span class="location-pin">●</span> Benvenuti al deposito LAPA</div>
-    <section class="panel map-panel" aria-labelledby="map-title"><div class="map-heading"><div class="ticket-tag"><span></span> ${MODES[p.mode].name}</div><span class="star-total">★ ${p.stars.reduce((a,b)=>a+b,0)}<small> / 15</small></span></div>
-    <h1 id="map-title">Ciao, ${esc(p.name)}!</h1>${button('rename','Modifica nome','text-button')}<p class="intro">${finished?'Che bel viaggio! Quale consegna rifacciamo?':'La prossima avventura ti aspetta.'}</p>
-    <ol class="level-list">${LEVELS[p.mode].map((level,i)=>`<li><button class="level ${i===unlocked&&!finished?'current':''} ${i>unlocked?'locked':''}" data-action="level" data-level="${i}" ${i>unlocked?'disabled':''} aria-label="Livello ${i+1}: ${level.title}${i>unlocked?', bloccato':''}"><span class="level-number">${i>unlocked?icon('lock'):i+1}</span><span class="level-text"><strong>${level.title}</strong>${p.stars[i]?stars(p.stars[i]):`<small>${level.destination==='bakery'?'Forno del Borgo':'Pizzeria Sole'}</small>`}</span><span class="level-sticker">${level.sticker}</span></button></li>`).join('')}</ol>
-    <p class="map-foot">${finished?'🏆 Capitolo completato. Sei un pilota LAPA!':'Una consegna alla volta, un mondo di scoperte.'}</p>
-    </section><div class="corner-note">Trascina il paesaggio per guardarti intorno</div>`;
-}
+function map(){const p=profile();return p?campaignMap(p,chapterPage):welcome();}
 
 function journeySteps(){
-  const steps=['load','drive','unload'];const labels=['Carica','Viaggia','Consegna'];
-  const active=session.stage==='quiz'?3:steps.indexOf(session.stage);
-  return `<nav class="journey" aria-label="Fasi della consegna">${steps.map((stage,i)=>`<span class="${i===active?'active':i<active?'done':''}"><b>${i<active?'✓':i+1}</b>${labels[i]}</span>`).join('')}${session.mode==='explorer'?`<span class="${active===3?'active':''}"><b>4</b>Scopri</span>`:''}</nav>`;
+  const visit=session.level.kind==='visit';
+  const steps=visit?['brief','drive','visit']:session.level.purchase?['purchase','load','drive','unload','quiz']:['load','drive','unload',...(session.mode==='explorer'?['quiz']:[])];
+  const labels={brief:'Scegli',purchase:'Acquista',load:'Carica',drive:'Viaggia',unload:'Consegna',visit:'Ascolta',quiz:'Scopri'};
+  const active=steps.indexOf(session.stage);
+  return `<nav class="journey" aria-label="Fasi della missione">${steps.map((stage,i)=>`<span class="${i===active?'active':i<active?'done':''}"><b>${i<active?'✓':i+1}</b>${labels[stage]}</span>`).join('')}</nav>`;
 }
+
 function play(){
   const p=profile();const s=session;const order=s.level.order;
-  const base=`<div class="mission-badge">${button('exit',icon('back'),'icon-button','aria-label="Torna ai livelli"')}<span><small>Livello ${s.index+1} · ${esc(p.name)}</small><strong>${s.level.title}</strong></span>${button('repeat',icon('sound'),'repeat-button','aria-label="Ascolta le istruzioni"')}</div>`;
+  const base=`<div class="mission-badge">${button('exit',icon('back'),'icon-button','aria-label="Torna ai livelli"')}<span><small>${s.level.bonus?'Incarico libero '+(s.bonusRound+1):'Livello '+(s.index+1)} · ${esc(p.name)}</small><strong>${s.level.title}</strong></span>${button('repeat',icon('sound'),'repeat-button','aria-label="Ascolta le istruzioni"')}</div>`;
   if(s.stage==='complete')return base+reward();
   let content='';
-  if(s.stage==='load'){
+  if(s.stage==='purchase')content=purchasePanel(s);
+  else if(s.stage==='brief')content=visitBrief(s);
+  else if(s.stage==='visit')content=visitPanel(s);
+  else if(s.stage==='load'){
     const ready=isLoaded(s);const shelf=Object.keys(order);
     const distractor=Object.keys(PRODUCTS).find(id=>!shelf.includes(id));if(s.mode==='explorer'&&distractor)shelf.push(distractor);
     content=`<div class="task-title"><div><h2>Carichiamo il camion!</h2><p>L’ordine di <strong>${customer()}</strong></p></div><span class="parcel-count">📦 ${s.cargo.length}<small>/${totalOrder(s.level)}</small></span></div>
@@ -107,10 +111,12 @@ function play(){
       <div class="shelf-label"><span>Tocca un prodotto per caricarlo</span><span>↓</span></div>
       <div class="product-shelf">${shelf.map(id=>`<button class="product" data-action="load" data-product="${id}" aria-label="Carica ${PRODUCTS[id].name}" style="--product-color:${PRODUCTS[id].color}"><span class="product-emoji">${PRODUCTS[id].emoji}</span><strong>${PRODUCTS[id].name}</strong><small>${PRODUCTS[id].zone}</small></button>`).join('')}</div>
       <div class="cargo-row"><span class="cargo-label">Sul camion</span><div class="cargo-slots">${Array.from({length:totalOrder(s.level)},(_,i)=>s.cargo[i]?`<button class="cargo-slot filled" data-action="remove" data-product="${s.cargo[i]}" aria-label="Togli ${PRODUCTS[s.cargo[i]].name}">${PRODUCTS[s.cargo[i]].emoji}</button>`:'<span class="cargo-slot empty" aria-hidden="true">·</span>').join('')}</div></div>
+      ${p.upgrades.includes('helper')&&!ready?button('auto-load','👩‍🔧 Marta, aiutami a caricare','secondary wide'):''}
       ${button('depart',`${ready?'Tutto pronto, partiamo!':'Prima carichiamo l’ordine'} ${icon('arrow')}`,'primary wide',ready?'':'disabled')}`;
   }else if(s.stage==='drive'){
-    content=`<div class="task-title"><div><h2>Andiamo da ${customer()}!</h2><p>Tieni premuto per far viaggiare il camion.</p></div><span class="destination-emoji">${s.level.destination==='bakery'?'🥐':'🍕'}</span></div>
-      ${button('cockpit',`${cockpit?'🌳 Vista dall’alto':'🚚 Sali a bordo'} ${icon('arrow')}`,'cab-toggle',`aria-pressed="${cockpit}"`)}
+    content=`<div class="task-title"><div><h2>Andiamo da ${customer()}!</h2><p>${s.level.vehicle==='car'?'Oggi sei in macchina: andiamo a conoscere il cliente.':'Tieni premuto per far viaggiare il camion.'}</p></div><span class="destination-emoji">${CUSTOMERS[s.level.destination].emoji}</span></div>
+      <div class="drive-tools ${p.upgrades.includes('driver')?'with-driver':''}">${button('cockpit',`${cockpit?'🌳 Vista dall’alto':s.level.vehicle==='car'?'🚙 Sali in macchina':'🚚 Sali a bordo'} ${icon('arrow')}`,'cab-toggle',`aria-pressed="${cockpit}"`)}
+      ${p.upgrades.includes('driver')?button('auto-drive',autoDriving?'⏸ Ferma Leo':'🧑‍✈️ Leo, guida tu','secondary wide',`aria-pressed="${autoDriving}"`):''}</div>
       <button class="drive-button" id="drive" aria-label="Tieni premuto per guidare"><span class="steering-wheel">◉</span><span><strong>Tieni premuto</strong><small>e si parte!</small></span><span class="drive-arrow">↑</span></button><p class="keyboard-hint">Sul computer puoi tenere premuta la barra spaziatrice.</p>`;
   }else if(s.stage==='unload'){
     content=`<div class="task-title"><div><h2>Eccoci, consegna in arrivo!</h2><p>Tocca le cassette per darle al cliente.</p></div><span class="destination-emoji">👨‍🍳</span></div>
@@ -123,8 +129,10 @@ function play(){
 }
 
 function reward(){
-  const last=session.index===4;
-  return `<section class="panel reward-panel" aria-labelledby="reward-title"><div class="reward-sticker">${last?'🏆':session.level.sticker}</div><div class="reward-stars" aria-label="Tre stelle">★ ★ ★</div><h1 id="reward-title">${last?'Che avventura!':'Consegna fatta!'}</h1><p>${last?'Hai completato tutte le consegne del capitolo. Il paese ti ringrazia!':`${customer()} ha tutto il necessario.<br>Grazie, ${esc(profile().name)}!`}</p>${button(last?'map':'next',`${last?'Torna alle avventure':'Prossima avventura'} ${icon('arrow')}`,'primary wide')}${button('replay','Rifacciamo questo giro?','text-button')}</section>`;
+  const p=profile(),last=session.index===LEVELS[session.mode].length-1,bonus=session.level.bonus;
+  const opened=!bonus&&!last&&LEVELS[session.mode][session.index+1].chapter>session.level.chapter;
+  const newZone=opened?CHAPTERS[session.level.chapter+1]:null;
+  return `<section class="panel reward-panel" aria-labelledby="reward-title"><div class="reward-sticker">${opened?newZone.icon:last?'🏆':session.level.sticker}</div><div class="reward-stars" aria-label="Tre stelle">★ ★ ★</div><h1 id="reward-title">${opened?'Una nuova zona!':last?'Il mondo è tuo!':session.level.kind==='visit'?'Un nuovo amico!':'Consegna fatta!'}</h1><p>${opened?`Le nuvole si aprono: <strong>${newZone.name}</strong> ti aspetta con nuovi clienti e nuove strade.`:last?'Hai aperto tutte le strade! Ora ti aspettano gli incarichi liberi, sempre diversi.':session.level.kind==='visit'?`${customer()} si affida a te per i prossimi ordini!`:`${customer()} ha tutto il necessario.<br>Grazie, ${esc(p.name)}!`}</p>${p.mode==='explorer'?`<p class="reward-coins">🪙 ${p.coins} monete nella tua attività</p>`:''}${button(bonus?'bonus':last?'map':opened?'map':'next',`${bonus?'Un altro incarico':last?'Esplora il mondo':opened?'Scopri la nuova zona':'Prossima avventura'} →`,'primary wide')}${button('replay','Rifacciamo questo giro?','text-button')}</section>`;
 }
 
 function render(){
@@ -151,7 +159,7 @@ function render(){
       event.preventDefault();
       if(data.profiles.length>=12){toast('Ci sono già 12 piloti. Scegli un profilo esistente.');return;}
       const name=new FormData(event.target).get('name');
-      data=addProfile(data,name,selectedMode,crypto.randomUUID());save();screen='map';render();chime();
+      data=addProfile(data,name,selectedMode,crypto.randomUUID());save();chapterPage=null;screen='map';world?.setRegion(0);render();chime();
       speak('Benvenuto a bordo! Scegli la tua prima consegna.');
     });
   }
@@ -167,16 +175,21 @@ function render(){
 function openLevel(index){
   const p=profile();if(!p||index>unlockedLevel(p))return;
   setDriving(false);cockpit=false;setEngine('off');session=startLevel(p.mode,index);screen='play';completedRecorded=false;
-  clearCelebration();world?.reset();world?.prepareTrip(session.level.destination);world?.setView('depot');render();speak(instruction());
+  clearCelebration();world?.reset();world?.setRegion(revealedChapter(p));world?.prepareTrip(session.level.destination,session.level.vehicle);world?.setView('depot');render();speak(instruction());
+}
+function openBonus(round){
+  const p=profile();if(!p||!p.stars.every(n=>n>0))return;
+  setDriving(false);cockpit=false;setEngine('off');session=startBonus(p.mode,round??p.bonusRounds);screen='play';completedRecorded=false;
+  clearCelebration();world?.reset();world?.setRegion(7);world?.prepareTrip(session.level.destination,session.level.vehicle);world?.setView('depot');render();speak(instruction());
 }
 function updateCargo(){world?.setCargo(session.cargo.map(id=>({id,color:PRODUCTS[id].color})));}
 function transition(result){
   if(!result.ok){chime('soft');toast(result.message);speak(result.message);return;}
   const previous=session.stage;session=result.session;updateCargo();
   if(session.stage==='drive'){world?.setView('road');syncEngine();}
-  if(session.stage==='unload'){setDriving(false);world?.setView(session.level.destination);}
+  if(['unload','visit'].includes(session.stage)){setDriving(false);world?.setView(session.level.destination);}
   if(session.stage==='complete'&&!completedRecorded){
-    completedRecorded=true;data=recordCompletion(data,data.activeId,session.index);save();chime('win');celebrate();
+    completedRecorded=true;data=session.level.bonus?recordBonus(data,data.activeId,session.bonusRound):recordCompletion(data,data.activeId,session.index);save();chime('win');celebrate();
   }else chime();
   if(session.stage!==previous){clearTimeout(toastTimer);toastElement.classList.remove('visible');}
   if(session.stage!=='drive')setEngine('off');
@@ -185,12 +198,13 @@ function transition(result){
   else if(session.stage==='load'&&isLoaded(session))speak('Perfetto! Il camion è pronto. Partiamo!');
 }
 function setDriving(value){
+  if(!value){autoDriving=false;const control=document.querySelector('[data-action=auto-drive]');if(control){control.textContent='🧑‍✈️ Leo, guida tu';control.setAttribute('aria-pressed','false');}}
   driving=Boolean(value&&screen==='play'&&session?.stage==='drive'&&!dialog.open);
   world?.setDriving(driving);document.querySelector('#drive')?.classList.toggle('driving',driving);
   syncEngine();
 }
 function syncEngine(){setEngine(screen==='play'&&session?.stage==='drive'&&!dialog.open&&!document.hidden?(driving?'drive':'idle'):'off');}
-function toMap(){setDriving(false);setEngine('off');stopSpeech();cockpit=false;session=null;screen=profile()?'map':'welcome';clearCelebration();world?.reset();render();}
+function toMap(){chapterPage=null;setDriving(false);setEngine('off');stopSpeech();cockpit=false;session=null;screen=profile()?'map':'welcome';clearCelebration();world?.reset();world?.setRegion(profile()?revealedChapter(profile()):0);render();}
 function clearCelebration(){clearTimeout(celebrationTimer);document.querySelector('#celebration').replaceChildren();}
 function celebrate(){
   if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
@@ -208,7 +222,23 @@ async function action(event){
     if(original.element!==element||original.action!==element.dataset.action){event.preventDefault();return;}
   }
   const a=element.dataset.action;
-  if(a==='cockpit'){
+  if(a==='chapter'){
+    const next=Number(element.dataset.chapter);if(next>revealedChapter(profile()))return;chapterPage=next;render();
+  }else if(a==='company')modal(companyPanel(profile()));
+  else if(a==='upgrade'){
+    const result=buyUpgrade(data,data.activeId,element.dataset.upgrade);
+    if(!result.ok){toast(result.message);return;}
+    data=result.data;save();dialog.close();render();modal(companyPanel(profile()));chime('win');
+  }else if(a==='buy-product')transition(buyProduct(session,element.dataset.product));
+  else if(a==='purchase-done')transition(confirmPurchase(session));
+  else if(a==='visit-product')transition(chooseVisit(session,element.dataset.product));
+  else if(a==='auto-load'&&profile().upgrades.includes('helper'))transition(autoLoad(session));
+  else if(a==='auto-drive'&&profile().upgrades.includes('driver')){
+    autoDriving=!autoDriving;setDriving(autoDriving);render();
+  }else if(a==='vehicle'&&session?.stage==='brief'){
+    session={...session,level:{...session.level,vehicle:element.dataset.vehicle==='car'?'car':'truck'}};world?.prepareTrip(session.level.destination,session.level.vehicle);render();
+  }else if(a==='bonus')openBonus();
+  else if(a==='cockpit'){
     setDriving(false);cockpit=!cockpit;world?.setCockpit(cockpit);render();
   }else if(a==='rename'){
     modal(`<h2 id="rename-title">Modifica il tuo nome</h2><form id="rename-form"><label for="rename-name">Nome del pilota</label><input id="rename-name" name="name" maxlength="20" autocomplete="off" value="${esc(profile().name)}"/><button type="submit" class="primary wide">Salva nome</button></form>`);
@@ -221,10 +251,10 @@ async function action(event){
     selectedMode=element.dataset.mode;
     const input=document.querySelector('#player-name');const name=input.value;render();document.querySelector('#player-name').value=name;
   }else if(a==='select-profile'){
-    data={...data,activeId:element.dataset.id};save();screen='map';session=null;world?.reset();render();
+    data={...data,activeId:element.dataset.id};save();chapterPage=null;screen='map';session=null;world?.reset();world?.setRegion(revealedChapter(profile()));render();
   }else if(a==='profiles'){
     if(screen==='play'){modal('<h2>Cambiare pilota?</h2><p>Questa consegna ricomincerà dall’inizio. Le stelle conquistate restano salvate.</p>'+button('confirm-profiles','Cambia pilota','primary wide'));}
-    else{screen='welcome';session=null;world?.reset();render();}
+    else{chapterPage=null;screen='welcome';session=null;world?.reset();world?.setRegion(0);render();}
   }else if(a==='confirm-profiles'){
     dialog.close();setEngine('off');stopSpeech();cockpit=false;screen='welcome';session=null;clearCelebration();world?.reset();render();
   }else if(a==='level')openLevel(Number(element.dataset.level));
@@ -234,7 +264,7 @@ async function action(event){
   else if(a==='unload')transition(unloadProduct(session,element.dataset.product));
   else if(a==='answer')transition(answerQuiz(session,Number(element.dataset.answer)));
   else if(a==='next')openLevel(session.index+1);
-  else if(a==='replay')openLevel(session.index);
+  else if(a==='replay'){if(session.level.bonus)openBonus(session.bonusRound);else openLevel(session.index);}
   else if(a==='map')toMap();
   else if(a==='home'||a==='exit'){
     if(screen==='play'&&session.stage!=='complete')modal('<h2>Torniamo alla mappa?</h2><p>Puoi ricominciare questa consegna quando vuoi. Le tue stelle sono al sicuro.</p>'+button('confirm-exit','Torna alla mappa','primary wide'));
@@ -243,7 +273,7 @@ async function action(event){
   else if(a==='sound'){data={...data,sound:!data.sound};setSound(data.sound);save();render();if(data.sound)speak('Audio attivato.');}
   else if(a==='repeat')speak(instruction());
   else if(a==='close-dialog')dialog.close();
-  else if(a==='help')modal('<div class="dialog-emoji">🚚</div><h2>Pronti a partire?</h2><ol class="help-list"><li>Carica i prodotti indicati nell’ordine.</li><li>Tieni premuto il pulsante per guidare.</li><li>Tocca le cassette per consegnarle.</li><li>Negli Esploratori, risolvi il piccolo enigma!</li></ol><p>Puoi ascoltare le istruzioni con l’altoparlante. Ogni pilota ha le sue stelle, salvate su questo dispositivo.</p>');
+  else if(a==='help')modal('<div class="dialog-emoji">🚚</div><h2>Pronti a partire?</h2><ol class="help-list"><li>Carica i prodotti indicati nell’ordine.</li><li>Tieni premuto il pulsante per guidare.</li><li>Tocca le cassette per consegnarle.</li><li>Nuove missioni aprono nuove strade e quartieri.</li><li>In macchina, visita il cliente e scegli il prodotto richiesto.</li><li>Negli Esploratori, acquista le scorte mancanti e risolvi gli enigmi. In «La mia LAPA» puoi assumere aiutanti.</li></ol><p>Puoi ascoltare le istruzioni con l’altoparlante. Ogni pilota ha le sue stelle, salvate su questo dispositivo.</p>');
   else if(a==='install'){
     if(await requestInstall())return;
     const state=getInstallState();
@@ -275,6 +305,7 @@ try {
   world=createWorld(document.querySelector('#world'),{onArrive:()=>{
     if(session?.stage==='drive')transition(arrive(session));
   }});
+  world.setRegion(profile()?revealedChapter(profile()):0);
 } catch(error){
   console.error('3D initialization failed:',error);
   app.innerHTML=`<main class="panel unsupported"><div class="dialog-emoji">🚚</div><h1>Accendiamo il motore?</h1><p>Il 3D non è disponibile in questo browser. Prova ad aprire il gioco in una versione aggiornata di Safari o Chrome.</p><button class="primary wide" onclick="location.reload()">Riprova</button></main>`;

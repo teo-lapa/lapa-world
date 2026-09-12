@@ -26,13 +26,28 @@ async def main():
     output = ROOT / 'public' / 'audio'
     output.mkdir(parents=True, exist_ok=True)
     mapping = {}
-    for i, text in enumerate(lines):
+    semaphore = asyncio.Semaphore(3)
+    async def generate(i, text):
         filename = hashlib.sha256(text.encode('utf-8')).hexdigest()[:16] + '.mp3'
         target = output / filename
-        if not target.exists() or target.stat().st_size < 500:
-            await edge_tts.Communicate(text, 'it-IT-ElsaNeural', rate='-8%', pitch='+0Hz').save(str(target))
-        mapping[text] = filename
-        print(f'Voice {i + 1}/{len(lines)}: {filename}', flush=True)
+        async with semaphore:
+            if not target.exists() or target.stat().st_size < 500:
+                temporary = target.with_suffix('.mp3.part')
+                for attempt in range(4):
+                    try:
+                        await edge_tts.Communicate(text, 'it-IT-ElsaNeural', rate='-8%', pitch='+0Hz').save(str(temporary))
+                        if temporary.stat().st_size < 500:
+                            raise RuntimeError(f'Empty voice clip: {filename}')
+                        temporary.replace(target)
+                        break
+                    except Exception:
+                        temporary.unlink(missing_ok=True)
+                        if attempt == 3:
+                            raise
+                        await asyncio.sleep(2 ** (attempt + 1))
+            print(f'Voice {i + 1}/{len(lines)}: {filename}', flush=True)
+        return text, filename
+    mapping = dict(await asyncio.gather(*(generate(i, text) for i, text in enumerate(lines))))
     (ROOT / 'src' / 'voice-map.json').write_text(json.dumps(mapping, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
     print(f'Generated {len(mapping)} clips, {sum(p.stat().st_size for p in output.glob("*.mp3"))} bytes.', flush=True)
 

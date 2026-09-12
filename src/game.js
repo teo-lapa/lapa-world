@@ -1,33 +1,7 @@
-export const PRODUCTS = {
-  tomato: { name: 'Pomodori', emoji: '🍅', color: '#e35b43', zone: 'Secco' },
-  flour: { name: 'Farina', emoji: '🌾', color: '#eec76e', zone: 'Secco' },
-  cheese: { name: 'Mozzarella', emoji: '🧀', color: '#f6e4ad', zone: 'Fresco' },
-  apple: { name: 'Mele', emoji: '🍎', color: '#95bf6f', zone: 'Fresco' },
-  milk: { name: 'Latte', emoji: '🥛', color: '#8dcada', zone: 'Fresco' },
-  ice: { name: 'Gelato', emoji: '🍦', color: '#c3a7d3', zone: 'Congelato' },
-};
-
-export const MODES = {
-  little: { name: 'Piccoli piloti', age: '3–4 anni', icon: '🚚', description: 'Tocca, carica e parti!', color: '#d83b35' },
-  explorer: { name: 'Esploratori', age: '7–8 anni', icon: '🧭', description: 'Consegne e piccoli enigmi', color: '#327866' },
-};
-
-export const LEVELS = {
-  little: [
-    { title: 'La prima consegna', destination: 'pizzeria', order: { tomato: 1 }, intro: 'Il cuoco aspetta i pomodori. Li portiamo noi!', sticker: '🍅' },
-    { title: 'Una pizza speciale', destination: 'pizzeria', order: { flour: 1, tomato: 1 }, intro: 'Farina e pomodori: oggi si prepara la pizza!', sticker: '🍕' },
-    { title: 'Un camion pieno', destination: 'pizzeria', order: { flour: 2, cheese: 1 }, intro: 'Due cassette di farina e una di mozzarella. Si parte!', sticker: '🚚' },
-    { title: 'Profumo di torta', destination: 'bakery', order: { apple: 2, milk: 1 }, intro: 'Il fornaio prepara una torta di mele!', sticker: '🥧' },
-    { title: 'La festa in paese', destination: 'pizzeria', order: { tomato: 2, flour: 1, cheese: 1 }, intro: 'Tutti a tavola! Portiamo gli ingredienti per la festa.', sticker: '🎈' },
-  ],
-  explorer: [
-    { title: 'Contiamo le cassette', destination: 'pizzeria', order: { flour: 2, tomato: 3 }, intro: 'Un ordine per la pizzeria. Contiamo bene le cassette!', sticker: '🍕', quiz: { question: '2 cassette di farina e 3 di pomodori. Quante in tutto?', picture: '🌾 🌾 + 🍅 🍅 🍅', answer: 5, options: [4, 5, 6], hint: 'Conta le due cassette di farina, poi aggiungi le tre di pomodori.' } },
-    { title: 'La torta del fornaio', destination: 'bakery', order: { apple: 4, milk: 2 }, intro: 'Oggi il fornaio ha un ordine bello grande!', sticker: '🥧', quiz: { question: 'Il fornaio usa 1 delle 4 cassette di mele. Quante ne restano?', picture: '🍎 🍎 🍎 🍎 − 🍎', answer: 3, options: [2, 4, 3], hint: 'Parti da quattro mele e togline una.' } },
-    { title: 'La squadra della pizza', destination: 'pizzeria', order: { cheese: 3, tomato: 2, flour: 1 }, intro: 'Tre prodotti diversi. Ogni cassetta conta!', sticker: '🧀', quiz: { question: 'Hai portato 3 mozzarelle, 2 pomodori e 1 farina. Quante cassette?', picture: '🧀 🧀 🧀 + 🍅 🍅 + 🌾', answer: 6, options: [6, 5, 7], hint: 'Tre più due fa cinque. Aggiungi ancora una cassetta.' } },
-    { title: 'Una merenda fresca', destination: 'bakery', order: { milk: 2, ice: 2, flour: 2 }, intro: 'Latte, gelato e farina per una merenda speciale.', sticker: '🍦', quiz: { question: '2 cassette su ogni scaffale, per 3 scaffali. Quante sono?', picture: '🥛 🥛   🍦 🍦   🌾 🌾', answer: 6, options: [4, 8, 6], hint: 'Conta due, poi quattro, poi sei.' } },
-    { title: 'La grande festa LAPA', destination: 'pizzeria', order: { tomato: 3, flour: 2, cheese: 3 }, intro: 'Otto cassette per la festa. Organizziamo la consegna!', sticker: '🏆', quiz: { question: 'Delle 8 cassette, il cuoco ne sistema 3. Quante restano da sistemare?', picture: '8 − 3 = ?', answer: 5, options: [5, 6, 4], hint: 'Parti da otto e togli tre: sette, sei, cinque.' } },
-  ],
-};
+import { PRODUCTS, MODES, ORIGINAL_LEVELS } from './original-levels.js';
+import { expandCampaign, bonusLevel, priceOf } from './campaign.js';
+export { PRODUCTS, MODES };
+export const LEVELS=expandCampaign(ORIGINAL_LEVELS);
 
 const success = session => ({ ok: true, session });
 const fail = message => ({ ok: false, message });
@@ -38,7 +12,35 @@ export const isLoaded = session => Object.entries(session.level.order).every(([i
 export function startLevel(mode, index) {
   mode = Object.hasOwn(MODES,mode) ? mode : 'little';
   index = Number.isInteger(index) && index >= 0 && index < LEVELS[mode].length ? index : 0;
-  return { mode, index, level: LEVELS[mode][index], stage: 'load', cargo: [] };
+  return createSession(mode,index,LEVELS[mode][index]);
+}
+function createSession(mode,index,level){
+  return {mode,index,level,stage:level.kind==='visit'?'brief':level.purchase?'purchase':'load',cargo:[],stock:{...level.stock},budget:level.budget||0};
+}
+export function startBonus(mode,round){
+  mode=Object.hasOwn(MODES,mode)?mode:'little';
+  round=Number.isSafeInteger(round)&&round>=0?round:0;
+  return {...createSession(mode,-1,bonusLevel(mode,round)),bonusRound:round};
+}
+export function buyProduct(session,id){
+  if(session.stage!=='purchase'||!Object.hasOwn(session.level.order,id))return fail('Acquistiamo solo i prodotti indicati nell’ordine.');
+  if((session.stock[id]||0)>=session.level.order[id])return fail('Di questo prodotto ne abbiamo già abbastanza!');
+  const price=priceOf(id);
+  if(session.budget<price)return fail('Non ci sono abbastanza monete per questa cassetta.');
+  return success({...session,budget:session.budget-price,stock:{...session.stock,[id]:(session.stock[id]||0)+1}});
+}
+export function confirmPurchase(session){
+  if(session.stage!=='purchase'||!Object.entries(session.level.order).every(([id,n])=>session.stock[id]>=n))return fail('Controlla la dispensa e acquista le cassette mancanti.');
+  return success({...session,stage:'load'});
+}
+export function chooseVisit(session,id){
+  if(session.stage!=='visit')return fail('Prima raggiungiamo il cliente.');
+  if(id!==session.level.request)return fail('Ascolta il cliente e cerca il prodotto che desidera.');
+  return success({...session,stage:'complete'});
+}
+export function autoLoad(session){
+  if(session.stage!=='load')return fail('Prima prepariamo tutti i prodotti.');
+  return success({...session,cargo:Object.entries(session.level.order).flatMap(([id,n])=>Array(n).fill(id))});
 }
 export function loadProduct(session, id) {
   if(session.stage !== 'load') return fail('Ora seguiamo la consegna.');
@@ -53,11 +55,12 @@ export function removeProduct(session,id) {
   return success({...session,cargo});
 }
 export function depart(session) {
+  if(session.stage==='brief')return success({...session,stage:'drive'});
   if(session.stage !== 'load' || !isLoaded(session)) return fail('Carichiamo prima tutte le cassette dell’ordine.');
   return success({...session,stage:'drive'});
 }
 export function arrive(session) {
-  return session.stage === 'drive' ? success({...session,stage:'unload'}) : fail('Prima raggiungiamo il cliente.');
+  return session.stage === 'drive' ? success({...session,stage:session.level.kind==='visit'?'visit':'unload'}) : fail('Prima raggiungiamo il cliente.');
 }
 export function unloadProduct(session,id) {
   if(session.stage !== 'unload' || !session.cargo.includes(id)) return fail('Questa cassetta non si può scaricare adesso.');

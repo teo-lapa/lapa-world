@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as game from '../src/game.js';
 
-test('each mode has five levels with complete solvable orders', () => {
+test('each mode has a full campaign with complete solvable orders', () => {
   for (const mode of ['little', 'explorer']) {
-    assert.equal(game.LEVELS[mode].length, 5);
+    assert.equal(game.LEVELS[mode].length, mode==='little'?40:60);
     for (const level of game.LEVELS[mode]) {
       assert.ok(Object.entries(level.order).every(([id, n]) => game.PRODUCTS[id] && Number.isInteger(n) && n > 0));
-      if (mode === 'explorer') assert.ok(level.quiz.options.includes(level.quiz.answer));
+      if (mode === 'explorer' && level.kind!=='visit') assert.ok(level.quiz.options.includes(level.quiz.answer));
     }
   }
 });

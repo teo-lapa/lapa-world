@@ -40,13 +40,13 @@ try {
   await click(page,'[data-action=home]');
   assert.equal(await page.$$eval('.level:disabled',nodes=>nodes.length),3);
   await page.reload({waitUntil:'networkidle0'});
-  assert.equal(await page.$eval('.star-total',e=>e.textContent.trim()),'★ 3 / 15');
+  assert.equal(await page.$eval('.star-total',e=>e.textContent.trim()),'★ 3 / 120');
   await click(page,'[data-action=rename]');
   await page.$eval('#rename-name',e=>{e.value='';});
   await page.type('#rename-name','Pilota rinominato');
   await click(page,'#rename-form button[type=submit]');
   assert.match(await page.$eval('#map-title',e=>e.textContent),/Pilota rinominato/);
-  assert.equal(await page.$eval('.star-total',e=>e.textContent.trim()),'★ 3 / 15');
+  assert.equal(await page.$eval('.star-total',e=>e.textContent.trim()),'★ 3 / 120');
   await click(page,'[data-action=profiles]');
   await click(page,'[data-mode=explorer]');
   await page.type('#player-name','Test esploratrice');
@@ -79,7 +79,7 @@ try {
   await page.setOfflineMode(true);
   await page.reload({waitUntil:'networkidle0'});
   assert.ok(await page.$('#world canvas'));
-  assert.equal(await page.$eval('.star-total',e=>e.textContent.trim()),'★ 3 / 15');
+  assert.equal(await page.$eval('.star-total',e=>e.textContent.trim()),'★ 3 / 180');
   await click(page,'[data-level="1"]');
   assert.ok(await page.$('[data-action=load][data-product=apple]'));
   await page.screenshot({path:'test-results/mobile-offline.png'});
