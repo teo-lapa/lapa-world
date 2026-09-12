@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import {launchBrowser} from './browser.mjs';
+const browser=await launchBrowser();
+try{
+ const page=await browser.newPage(),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.setViewport({width:600,height:634});
+ await page.goto('http://127.0.0.1:4173/lapa-world/',{waitUntil:'networkidle0'});
+ await page.type('#player-name','Pilota');await page.click('#profile-form button[type=submit]');
+ assert.ok(await page.$('.campaign-panel.compact'));
+ await page.screenshot({path:'test-results/world-first-map.png'});
+ await page.click('[data-action=toggle-levels]');
+ assert.ok(await page.$('.campaign-panel.expanded'));
+ await page.click('[data-action=toggle-levels]');
+ await page.click('[data-level="0"]');
+ await page.click('[data-action=toggle-task]');
+ assert.equal(await page.$eval('.mission-badge',e=>e.getBoundingClientRect().height),0);
+ await page.click('[data-action=toggle-task]');
+ await page.click('[data-action=load][data-product=tomato]');
+ await page.click('[data-action=depart]');
+ assert.equal(await page.$eval('.mission-badge',e=>e.getBoundingClientRect().height),0);
+ await page.click('[data-action=cockpit]');
+ await page.keyboard.down('Space');
+ await page.waitForSelector('[data-action=unload]',{timeout:60000});
+ await page.keyboard.up('Space');
+ await page.click('[data-action=unload]');
+ await page.waitForSelector('#reward-title');
+ assert.deepEqual(errors,[]);
+ console.log('PASS: compact map, expanded levels, hidden/restored commands, unobstructed cockpit, complete delivery.');
+}finally{await browser.close();}

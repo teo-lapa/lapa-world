@@ -3,6 +3,7 @@ import '@fontsource/baloo-2/latin-800.css';
 import '@fontsource/nunito/latin-600.css';
 import '@fontsource/nunito/latin-800.css';
 import './style.css';
+import './world-first.css';
 import { createWorld } from './world.js';
 import { PRODUCTS, MODES, LEVELS, startLevel, loadProduct, removeProduct, depart, arrive, unloadProduct, answerQuiz, countProduct, totalOrder, isLoaded, startBonus, buyProduct, confirmPurchase, chooseVisit, autoLoad } from './game.js';
 import { loadSave, persistSave, addProfile, renameProfile, recordCompletion, unlockedLevel, buyUpgrade, recordBonus } from './storage.js';
@@ -17,6 +18,8 @@ const toastElement=document.querySelector('#toast');
 let data=loadSave();
 let screen=data.activeId?'map':'welcome';
 let chapterPage=null;
+let levelsExpanded=false;
+let taskCollapsed=false;
 let autoDriving=false;
 let selectedMode='little';
 let session=null;
@@ -85,7 +88,7 @@ function welcome(){
     </section><div class="corner-note">Fatto di curiosità e buone cose.</div>`;
 }
 
-function map(){const p=profile();return p?campaignMap(p,chapterPage):welcome();}
+function map(){const p=profile();return p?campaignMap(p,chapterPage,levelsExpanded):welcome();}
 
 function journeySteps(){
   const visit=session.level.kind==='visit';
@@ -98,7 +101,7 @@ function journeySteps(){
 function play(){
   const p=profile();const s=session;const order=s.level.order;
   const base=`<div class="mission-badge">${button('exit',icon('back'),'icon-button','aria-label="Torna ai livelli"')}<span><small>${s.level.bonus?'Incarico libero '+(s.bonusRound+1):'Livello '+(s.index+1)} · ${esc(p.name)}</small><strong>${s.level.title}</strong></span>${button('repeat',icon('sound'),'repeat-button','aria-label="Ascolta le istruzioni"')}</div>`;
-  if(s.stage==='complete')return base+reward();
+  if(s.stage==='complete')return reward();
   let content='';
   if(s.stage==='purchase')content=purchasePanel(s);
   else if(s.stage==='brief')content=visitBrief(s);
@@ -125,7 +128,7 @@ function play(){
   }else if(s.stage==='quiz'){
     content=`<div class="task-title"><div><div class="ticket-tag">Una piccola scoperta</div><h2>Facciamo due conti!</h2></div><span class="destination-emoji">🧩</span></div><p class="quiz-question">${s.level.quiz.question}</p><div class="quiz-picture" aria-hidden="true">${s.level.quiz.picture}</div><div class="answers">${s.level.quiz.options.map(n=>button('answer',n,'answer',`data-answer="${n}" aria-label="Risposta ${n}"`)).join('')}</div><p class="task-foot">Prenditi il tuo tempo. Puoi riprovare!</p>`;
   }
-  return base+`<section class="panel play-panel ${s.stage}-panel" aria-label="${s.stage==='load'?'Caricamento':s.stage==='drive'?'Viaggio':s.stage==='unload'?'Consegna':'Enigma'}">${journeySteps()}${content}</section>`;
+  return `<section class="panel play-panel ${s.stage}-panel ${taskCollapsed?'task-collapsed':''}" aria-label="${s.stage==='load'?'Caricamento':s.stage==='drive'?'Viaggio':s.stage==='unload'?'Consegna':'Enigma'}"><button class="task-toggle" data-action="toggle-task" aria-expanded="${!taskCollapsed}">${taskCollapsed?'Mostra i comandi':'Guarda la mappa'} ${taskCollapsed?'&#9650;':'&#9660;'}</button><div class="task-content">${base}${journeySteps()}${content}</div></section>`;
 }
 
 function reward(){
@@ -141,6 +144,7 @@ function render(){
   const stage=screen==='play'?`${screen}:${session.index}:${session.stage}`:screen;
   const stageChanged=renderedStage!==undefined&&renderedStage!==stage;
   const initial=renderedStage===undefined;
+  if(stageChanged)taskCollapsed=false;
   renderedStage=stage;
   const name=document.querySelector('#player-name')?.value;
   const updateNotice=getInstallState().updateReady&&['welcome','map'].includes(screen)?`<aside class="update-notice" aria-label="Aggiornamento disponibile"><p>Una nuova versione di LAPA World è pronta.</p>${button('update','Aggiorna il gioco','secondary')}</aside>`:'';
@@ -204,7 +208,7 @@ function setDriving(value){
   syncEngine();
 }
 function syncEngine(){setEngine(screen==='play'&&session?.stage==='drive'&&!dialog.open&&!document.hidden?(driving?'drive':'idle'):'off');}
-function toMap(){chapterPage=null;setDriving(false);setEngine('off');stopSpeech();cockpit=false;session=null;screen=profile()?'map':'welcome';clearCelebration();world?.reset();world?.setRegion(profile()?revealedChapter(profile()):0);render();}
+function toMap(){chapterPage=null;levelsExpanded=false;setDriving(false);setEngine('off');stopSpeech();cockpit=false;session=null;screen=profile()?'map':'welcome';clearCelebration();world?.reset();world?.setRegion(profile()?revealedChapter(profile()):0);render();}
 function clearCelebration(){clearTimeout(celebrationTimer);document.querySelector('#celebration').replaceChildren();}
 function celebrate(){
   if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
@@ -222,7 +226,9 @@ async function action(event){
     if(original.element!==element||original.action!==element.dataset.action){event.preventDefault();return;}
   }
   const a=element.dataset.action;
-  if(a==='chapter'){
+  if(a==='toggle-levels'){levelsExpanded=!levelsExpanded;render();}
+  else if(a==='toggle-task'){setDriving(false);taskCollapsed=!taskCollapsed;render();}
+  else if(a==='chapter'){
     const next=Number(element.dataset.chapter);if(next>revealedChapter(profile()))return;chapterPage=next;render();
   }else if(a==='company')modal(companyPanel(profile()));
   else if(a==='upgrade'){

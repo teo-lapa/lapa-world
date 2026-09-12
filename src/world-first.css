@@ -1,0 +1,37 @@
+/* Keep the 3D world dominant; details are opened deliberately. */
+.map-dock{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.map-dock small{font-size:10px;color:#687b70;font-weight:800;letter-spacing:.5px}
+.map-dock h2{font-size:21px;margin-top:4px}
+.dock-toggle{border-radius:12px;background:#e3eddf;padding:10px;font-size:12px;font-weight:800;min-height:44px;flex-shrink:0}
+.campaign-panel.compact{top:auto;bottom:20px;transform:none;padding:16px;width:410px;max-height:32svh}
+.compact>.map-heading,.compact>#map-title,.compact>.text-button,.compact>.campaign-summary,.compact>.chapter-nav,.compact>.chapter-heading,.compact>.chapter-story,.compact>.map-foot,.compact>.frontier:not(.unlocked){display:none}
+.compact>.level-list>li:not(.next-mission){display:none}
+.compact>.frontier.unlocked{margin-top:8px;padding:0;border:0;background:none}
+.compact>.frontier.unlocked>strong,.compact>.frontier.unlocked>p,.compact>.frontier.unlocked>small{display:none}
+.compact>.frontier.unlocked .primary{margin:0}
+.task-toggle{display:block;margin:0 auto 8px;background:#e5eddf;border-radius:16px;padding:7px 15px;min-height:36px;font-size:11px;font-weight:800}
+.task-collapsed .task-content{display:none}
+.play-panel.task-collapsed{width:auto!important;min-width:180px;padding:8px 14px!important;top:auto!important;bottom:18px!important;left:50%!important;right:auto!important;transform:translateX(-50%)!important;max-height:70px!important}
+.task-collapsed .task-toggle{margin:0}
+.play-panel .mission-badge{position:static!important;max-width:none!important;width:100%;padding:0 0 8px;box-shadow:none;background:none;gap:8px}
+.play-panel .mission-badge strong{font-size:12px}.play-panel .mission-badge small{font-size:10px}
+.play-panel .mission-badge .repeat-button{margin-left:auto}
+.drive-panel .mission-badge{display:none}
+.drive-panel:not(.task-collapsed) .journey,.drive-panel:not(.task-collapsed) .task-title,.drive-panel:not(.task-collapsed) .keyboard-hint{display:none}
+.drive-panel{padding:12px 18px!important}
+.drive-panel .drive-button{height:72px}
+.drive-panel .cab-toggle{min-height:38px;margin-bottom:8px;padding:7px}
+body[data-cockpit=true] .drive-panel .task-toggle{display:none}
+@media(max-width:760px){
+ .campaign-panel.compact{right:50%;left:auto;transform:translateX(50%);width:calc(100% - 28px);max-width:440px;bottom:14px;padding:12px 14px;max-height:32svh}
+ .map-dock h2{font-size:19px}.map-dock small{font-size:9px}.dock-toggle{font-size:11px;padding:8px;min-height:40px}
+ .play-panel:not(.drive-panel):not(.task-collapsed){max-height:44svh;padding:12px 14px}
+ .play-panel .journey{margin-bottom:8px}.play-panel .task-title{margin-bottom:8px}
+ .play-panel .task-title h2{font-size:21px}.play-panel .task-title p{font-size:11px}
+ .play-panel .cargo-row{padding:8px 0}.play-panel .product-emoji{font-size:26px}
+}
+@media(orientation:landscape) and (max-height:560px){
+ .campaign-panel.compact{right:15px;left:auto;transform:none;width:43vw;max-width:410px;bottom:14px;top:auto;max-height:55svh}
+ .play-panel:not(.drive-panel):not(.task-collapsed){max-height:calc(100svh - 83px)}
+ .map-dock{gap:6px}.map-dock h2{font-size:17px}.dock-toggle{font-size:10px}
+}

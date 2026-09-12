@@ -1,3 +1,4 @@
+import { roadClearance, TOWN_ROUTES } from './road-clearance.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createModels } from './world-models.js';
@@ -38,8 +39,9 @@ export function createWorld(host, { onArrive = () => {} } = {}) {
   let player=truck,region=0;
   const expansion=createExpansion(scene,m);
   for (let i=0;i<5;i++)m.box(town,'#f9f3db',[-11.9+i*.37,.12,5.2],[.2,.025,2.4]);
+  const clearOfRoad=roadClearance({...TOWN_ROUTES,...EXPANSION_ROUTES});
   // Park, garden, trees, street lamps and Swiss flag.
-  for(const [x,z,s,e] of [[-15,-8,1.2,1],[-16,-3,1,0],[-15,5,1.1,0],[-12,11,1,0],[-6,12,1.1,0],[0,12,1,0],[10,10,1.1,0],[15,7,1.1,1],[16,1,1.1,0],[15,-6,1,1],[10,-12,1.1,1],[4,-12,1,1],[-3,-12,1.4,1],[-10,-12,1.2,1],[-5,6.3,1,0],[-8,5.5,.85,0]])m.tree(town,x,z,s,e);
+  for(const [x,z,s,e] of [[-15,-8,1.2,1],[-16,-3,1,0],[-15,5,1.1,0],[-12,11,1,0],[-6,12,1.1,0],[0,12,1,0],[10,10,1.1,0],[15,7,1.1,1],[16,1,1.1,0],[15,-6,1,1],[10,-12,1.1,1],[4,-12,1,1],[-3,-12,1.4,1],[-10,-12,1.2,1],[-5,6.3,1,0],[-8,5.5,.85,0]]){if(clearOfRoad(x,z))m.tree(town,x,z,s,e);}
   m.cyl(town,'#e7d7b1',[-4.9,.1,5.6],[2.1,.13,1.7]);
   for(const x of [-6,-4]){m.box(town,'#b48250',[x,.55,5.9],[1.3,.12,.43]);m.box(town,'#b48250',[x,.88,6.1],[1.3,.5,.09]);for(const dx of [-.45,.45])m.box(town,'#5b7365',[x+dx,.29,5.9],[.08,.5,.35]);}
   for(let i=0;i<32;i++) {
@@ -76,11 +78,7 @@ export function createWorld(host, { onArrive = () => {} } = {}) {
     goalPosition.copy(goalTarget).add(cameraOffset);
     transition = true;
   }
-  const routes={
-    pizzeria:[[-5.9,1.4],[-5.9,3],[-10.7,3.6],[-13.4,5.9],[-10.5,9.4],[0,9.4],[10.4,9.4],[13.4,6],[13.4,-2],[10.7,-.5],[7.2,-.5]],
-    bakery:[[-5.9,1.4],[-5.9,3],[-10.7,3.6],[-13.4,5.9],[-10.5,9.4],[-3,9.4],[5.7,9.4],[7.1,7.8]]
-  };
-  Object.assign(routes,EXPANSION_ROUTES);
+  const routes={...TOWN_ROUTES,...EXPANSION_ROUTES};
   let curve,tripDuration=12;
   function makeRoute(){curve=new THREE.CatmullRomCurve3(routes[destination].map(([x,z])=>new THREE.Vector3(x,.2,z)),false,'centripetal');tripDuration=REGION_DESTINATIONS[destination].chapter===0?12:Math.max(14,Math.min(28,curve.getLength()/4.5));}
   makeRoute();

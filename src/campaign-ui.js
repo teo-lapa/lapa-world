@@ -4,14 +4,15 @@ import { UPGRADES, unlockedLevel } from './storage.js';
 
 const esc=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const revealedChapter=p=>campaignChapter(p.mode,unlockedLevel(p));
-export function campaignMap(p,page){
+export function campaignMap(p,page,expanded=false){
   const revealed=revealedChapter(p),current=page??revealed,chapter=CHAPTERS[current];
   const start=chapterStart(p.mode,current),count=CHAPTER_LENGTHS[p.mode][current];
   const unlocked=unlockedLevel(p),completed=p.stars.filter(n=>n>0).length;
   const finished=completed===p.stars.length;
   const localComplete=p.stars.slice(start,start+count).filter(n=>n>0).length;
   return `<div class="world-caption"><span class="location-pin">●</span> ${revealed+1} zone scoperte · ${CHAPTERS[revealed].name}</div>
-    <section class="panel map-panel campaign-panel" aria-labelledby="map-title">
+    <section class="panel map-panel campaign-panel ${expanded?'expanded':'compact'}" aria-labelledby="map-title">
+    <div class="map-dock"><div><small>ZONA ${current+1} · ${completed}/${p.stars.length} MISSIONI</small><h2 id="dock-title">${chapter.icon} ${chapter.name}</h2></div><button class="dock-toggle" data-action="toggle-levels" aria-expanded="${expanded}">${expanded?'Chiudi livelli ⌄':'Tutti i livelli ⌃'}</button></div>
     <div class="map-heading"><div class="ticket-tag"><span></span> UN MONDO CHE CRESCE</div><span class="star-total">★ ${p.stars.reduce((a,b)=>a+b,0)}<small> / ${p.stars.length*3}</small></span></div>
     <h1 id="map-title">Ciao, ${esc(p.name)}!</h1><button class="text-button" data-action="rename">Modifica nome</button>
     <div class="campaign-summary"><span>${completed} / ${p.stars.length} missioni</span>${p.mode==='explorer'?`<button data-action="company" class="company-chip">🪙 ${p.coins} · La mia LAPA</button>`:'<span>🚚 Piccoli piloti</span>'}</div>
@@ -20,7 +21,7 @@ export function campaignMap(p,page){
     <p class="chapter-story">${chapter.story}</p>
     <ol class="level-list" start="${start+1}">${LEVELS[p.mode].slice(start,start+count).map((l,j)=>{
       const i=start+j,done=p.stars[i]>0,locked=i>unlocked;
-      return `<li><button class="level ${i===unlocked&&!done?'current':''} ${locked?'locked':''}" data-action="level" data-level="${i}" ${locked?'disabled':''} aria-label="Livello ${i+1}: ${l.title}${locked?', bloccato':''}"><span class="level-number">${locked?'🔒':i+1}</span><span class="level-text"><strong>${l.title}</strong><small>${done?'⭐ ⭐ ⭐':`${l.kind==='visit'?'Visita':l.purchase?'Acquisti + consegna':'Consegna'} · ${CUSTOMERS[l.destination].name}`}</small></span><span class="level-sticker">${l.sticker}</span></button></li>`;
+      return `<li class="${i===Math.min(unlocked,start+count-1)?'next-mission':''}"><button class="level ${i===unlocked&&!done?'current':''} ${locked?'locked':''}" data-action="level" data-level="${i}" ${locked?'disabled':''} aria-label="Livello ${i+1}: ${l.title}${locked?', bloccato':''}"><span class="level-number">${locked?'🔒':i+1}</span><span class="level-text"><strong>${l.title}</strong><small>${done?'⭐ ⭐ ⭐':`${l.kind==='visit'?'Visita':l.purchase?'Acquisti + consegna':'Consegna'} · ${CUSTOMERS[l.destination].name}`}</small></span><span class="level-sticker">${l.sticker}</span></button></li>`;
     }).join('')}</ol>
     ${finished?`<div class="frontier unlocked"><strong>🏆 Tutto il mondo è aperto!</strong><p>Nuovi ordini, nuove visite: l’avventura continua.</p><button class="primary wide" data-action="bonus">Incarico libero ${p.bonusRounds+1} →</button><small>${p.bonusRounds} incarichi liberi completati</small></div>`:current===revealed?`<div class="frontier"><span>☁️</span><div><strong>${current<7?'Un’altra zona oltre le nuvole':'Il mondo delle consegne libere'}</strong><p>Ancora ${count-localComplete} missioni per scoprirla.</p></div></div>`:'<p class="map-foot">Zona completata! Puoi rigiocare ogni missione.</p>'}
     </section><div class="corner-note">Trascina il paesaggio per esplorare · Le strade si aprono giocando</div>`;
